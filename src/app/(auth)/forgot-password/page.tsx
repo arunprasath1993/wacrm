@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AuthShell } from "@/components/auth/auth-shell";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
@@ -50,8 +51,8 @@ export default function ForgotPasswordPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-md border-border bg-card">
+      <AuthShell>
+        <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
           <CardHeader className="items-center text-center">
             <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
               <CheckCircle className="h-6 w-6 text-primary" />
@@ -79,13 +80,13 @@ export default function ForgotPasswordPage() {
             </Link>
           </CardContent>
         </Card>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md border-border bg-card">
+    <AuthShell>
+      <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
         <CardHeader className="items-center text-center">
           <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <MessageSquare className="h-6 w-6 text-primary" />
@@ -136,6 +137,6 @@ export default function ForgotPasswordPage() {
           </Link>
         </CardContent>
       </Card>
-    </div>
+    </AuthShell>
   );
 }

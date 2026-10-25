@@ -18,6 +18,8 @@ import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
 import { useTranslations } from 'next-intl';
+import { useApps } from '@/hooks/use-apps';
+import { ActiveAppNotice } from '@/components/apps/active-app-notice';
 
 /**
  * Poll cadence while any broadcast is sending. Kept modest so we don't
@@ -63,6 +65,9 @@ export default function BroadcastsPage() {
   const tStatus = useTranslations('Broadcasts.status');
   const tGate = useTranslations('GatedButton');
   const canCreate = useCan('send-messages');
+  // Per-app campaign list when an app is picked in the top bar.
+  const { activeApp } = useApps();
+  const activeAppId = activeApp?.id ?? null;
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +84,8 @@ export default function BroadcastsPage() {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setBroadcasts(data ?? []);
+      const rows = (data ?? []) as Broadcast[];
+      setBroadcasts(activeAppId ? rows.filter((b) => b.app_id === activeAppId) : rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorLoad'));
     } finally {
@@ -89,7 +95,9 @@ export default function BroadcastsPage() {
 
   useEffect(() => {
     fetchBroadcasts();
-  }, []);
+    // Re-read when the app switcher changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeAppId]);
 
   const anySending = useMemo(
     () => broadcasts.some((b) => b.status === 'sending'),
@@ -183,10 +191,11 @@ export default function BroadcastsPage() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {t('subtitle')}
           </p>
+          <ActiveAppNotice className="mt-3" />
         </div>
         <GatedButton
           canAct={canCreate}

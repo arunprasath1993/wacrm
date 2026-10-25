@@ -22,6 +22,7 @@ import { derivePresence } from '@/lib/presence'
 
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { AttentionRow } from '@/components/dashboard/attention-row'
+import { AppsCard } from '@/components/dashboard/apps-card'
 import { CampaignsCard } from '@/components/dashboard/campaigns-card'
 import { KpiRow } from '@/components/dashboard/kpi-row'
 import { MessageVolumeCard } from '@/components/dashboard/message-volume-card'
@@ -163,12 +164,11 @@ function DashboardPageInner() {
             <ReplyQueueCard data={data} now={now} />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <AppsCard />
             <PipelineCard data={data} currency={defaultCurrency} />
             <TeamCard data={data} now={now} />
-            <div className="lg:col-span-2 2xl:col-span-1">
-              <CampaignsCard data={data} />
-            </div>
+            <CampaignsCard data={data} />
           </div>
 
           <ActivityFeed items={activity} loading={activityLoading} />

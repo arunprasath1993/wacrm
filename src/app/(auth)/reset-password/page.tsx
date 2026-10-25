@@ -16,6 +16,7 @@
 // ============================================================
 
 import { useEffect, useState } from "react";
+import { AuthShell } from "@/components/auth/auth-shell";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
@@ -82,19 +83,19 @@ export default function ResetPasswordPage() {
 
   if (status === "checking") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <AuthShell>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           {t("checking")}
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   if (status === "expired") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-md border-border bg-card">
+      <AuthShell>
+        <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
           <CardHeader className="items-center text-center">
             <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10">
               <MailX className="h-6 w-6 text-amber-400" />
@@ -122,14 +123,14 @@ export default function ResetPasswordPage() {
             </Link>
           </CardContent>
         </Card>
-      </div>
+      </AuthShell>
     );
   }
 
   if (status === "done") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Card className="w-full max-w-md border-border bg-card">
+      <AuthShell>
+        <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
           <CardHeader className="items-center text-center">
             <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
               <CheckCircle className="h-6 w-6 text-primary" />
@@ -157,13 +158,13 @@ export default function ResetPasswordPage() {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md border-border bg-card">
+    <AuthShell>
+      <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
         <CardHeader className="items-center text-center">
           <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <KeyRound className="h-6 w-6 text-primary" />
@@ -223,6 +224,6 @@ export default function ResetPasswordPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AuthShell>
   );
 }

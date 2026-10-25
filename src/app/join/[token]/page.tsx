@@ -207,7 +207,7 @@ export default function JoinPage() {
   // ----- Loading state (peek pending OR auth not yet resolved) -----
   if (peek === null || authedUserId === undefined) {
     return (
-      <Card className="w-full max-w-md border-border bg-card">
+      <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
         <CardContent className="flex flex-col items-center gap-3 py-12">
           <Loader2 className="size-6 animate-spin text-primary" />
           <p className="text-sm text-muted-foreground">{t('verifying')}</p>
@@ -220,7 +220,7 @@ export default function JoinPage() {
   if (!peek.ok) {
     const failKey = FAIL_KEY[peek.reason];
     return (
-      <Card className="w-full max-w-md border-border bg-card">
+      <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
         <CardHeader className="items-center text-center">
           <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10">
             <MailX className="h-6 w-6 text-red-400" />
@@ -314,7 +314,7 @@ export default function JoinPage() {
   if (authedUserId) {
     return (
       <>
-        <Card className="w-full max-w-md border-border bg-card">
+        <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
           {inviteHeader}
           <CardContent className="flex flex-col gap-3">
             <Button
@@ -401,7 +401,7 @@ export default function JoinPage() {
 
   // ----- Not authed: prompt to sign up or sign in -----
   return (
-    <Card className="w-full max-w-md border-border bg-card">
+    <Card className="w-full gap-6 bg-transparent py-0 shadow-none ring-0 [&>[data-slot=card-content]]:px-0 [&>[data-slot=card-header]]:items-start [&>[data-slot=card-header]]:px-0 [&>[data-slot=card-header]]:text-left">
       {inviteHeader}
       <CardContent className="flex flex-col gap-2">
         <Link href={`/signup?invite=${encodeURIComponent(token!)}`}>

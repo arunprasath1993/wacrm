@@ -201,6 +201,24 @@ match returns `200` with the existing contact; a new contact returns
 `201`. The response body is the serialized contact (same shape as the
 list rows above).
 
+**Apps (this fork).** Pass `"app": "<slug>"` (Settings → Apps shows each
+app's slug) to add the contact to that app. Unlike `tags`, which
+*replaces* the contact's tag set, `app` is **additive**: a dealer who is
+already a MoneyCtrl lead keeps that membership when Nixie CRM posts the
+same phone number. A newly-joined app fires `tag_added` automations, so a
+welcome template can go out immediately. An unknown or archived slug
+returns `400` before anything is written.
+
+```bash
+curl -X POST https://crm.example.com/api/v1/contacts \
+  -H "Authorization: Bearer $WACRM_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+919876543210","name":"Senthil","app":"nixie-crm"}'
+```
+
+`GET /api/v1/contacts?app=<slug>` lists one app's contacts (it cannot be
+combined with `?tag=`).
+
 ### `GET` / `PATCH /api/v1/contacts/{id}`
 
 Read or update one contact. Scopes: `contacts:read` / `contacts:write`.

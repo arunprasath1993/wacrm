@@ -17,6 +17,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModeToggle } from "@/components/layout/mode-toggle";
+import { AppSwitcher } from "@/components/apps/app-switcher";
+import { HelpButton } from "@/components/help/help-button";
+import { useApps } from "@/hooks/use-apps";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "dashboard",
@@ -26,6 +29,9 @@ const pageTitles: Record<string, string> = {
   "/pipelines": "pipelines",
   "/broadcasts": "broadcasts",
   "/automations": "automations",
+  "/flows": "flows",
+  "/agents": "agents",
+  "/help": "help",
   "/settings": "settings",
 };
 
@@ -49,6 +55,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
+  const { activeApp } = useApps();
   const titleKey = getPageTitleKey(pathname);
 
   const initial =
@@ -57,8 +64,15 @@ export function Header({ onOpenSidebar }: HeaderProps) {
     "U";
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-6">
-      <div className="flex min-w-0 items-center gap-2">
+    <header className="relative flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-6">
+      {/* App band: the active app's colour runs along the top edge of
+          every page, so it's always obvious whose audience you're in. */}
+      <span
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-[3px] transition-colors"
+        style={{ backgroundColor: activeApp?.color ?? "transparent" }}
+      />
+      <div className="flex min-w-0 items-center gap-2 sm:gap-4">
         {/* Hamburger — mobile only. 44×44 hit target per Apple HIG. */}
         <button
           type="button"
@@ -68,12 +82,15 @@ export function Header({ onOpenSidebar }: HeaderProps) {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
+        <h1 className="truncate font-heading text-lg font-semibold tracking-tight text-foreground sm:text-xl">
           {t(titleKey as string)}
         </h1>
+        <AppSwitcher className="hidden md:inline-flex" />
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
+        <AppSwitcher compact className="md:hidden" />
+        <HelpButton />
         <ModeToggle />
 
         <DropdownMenu>

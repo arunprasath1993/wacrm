@@ -19,6 +19,42 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  *     deny them. A supply-chain compromise or a forgotten plugin
  *     can't silently opt back in.
  */
+/**
+ * Supabase origin for CSP. `*.supabase.co` covers hosted projects; a
+ * custom Supabase domain (or self-hosted Supabase) is picked up from
+ * NEXT_PUBLIC_SUPABASE_URL so enforcing the CSP never cuts the app off
+ * from its own database.
+ */
+function supabaseOrigins(): { http: string; ws: string } {
+  const fallback = { http: "https://*.supabase.co", ws: "wss://*.supabase.co" };
+  try {
+    const raw = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!raw) return fallback;
+    const url = new URL(raw);
+    if (url.hostname.endsWith(".supabase.co")) return fallback;
+    const wsProtocol = url.protocol === "http:" ? "ws:" : "wss:";
+    return {
+      http: `${fallback.http} ${url.origin}`,
+      ws: `${fallback.ws} ${wsProtocol}//${url.host}`,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+const SUPABASE = supabaseOrigins();
+
+/**
+ * The CSP is ENFORCED by default in this fork. Set CSP_REPORT_ONLY=true
+ * (and redeploy) to fall back to report-only while debugging a blocked
+ * resource — the browser console then lists violations without
+ * breaking the page.
+ */
+const CSP_HEADER_KEY =
+  process.env.CSP_REPORT_ONLY === "true"
+    ? "Content-Security-Policy-Report-Only"
+    : "Content-Security-Policy";
+
 const SECURITY_HEADERS = [
   {
     key: "Strict-Transport-Security",
@@ -27,6 +63,17 @@ const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  // Private CRM: tell every crawler not to index, follow, cache or
+  // snippet anything — applies to HTML, API JSON and static files alike,
+  // so even a leaked URL stays out of search results.
+  {
+    key: "X-Robots-Tag",
+    value: "noindex, nofollow, noarchive, nosnippet, noimageindex",
+  },
+  // Isolate the browsing context from cross-origin popups/openers.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "X-DNS-Prefetch-Control", value: "off" },
+  { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
   {
     // Microphone is allowed for same-origin (`self`) so the inbox
     // composer can record voice notes via MediaRecorder. Everything
@@ -36,7 +83,7 @@ const SECURITY_HEADERS = [
     value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
   },
   {
-    key: "Content-Security-Policy-Report-Only",
+    key: CSP_HEADER_KEY,
     value: [
       "default-src 'self'",
       // Next.js needs 'unsafe-inline' for its inline hydration script
@@ -51,11 +98,14 @@ const SECURITY_HEADERS = [
       "img-src 'self' data: blob: https:",
       // Outbound media previews (blob: from MediaRecorder + file picker)
       // and Supabase public-bucket audio/video the inbox renders.
-      "media-src 'self' blob: https://*.supabase.co",
+      `media-src 'self' blob: ${SUPABASE.http}`,
+      // Voice-note recorder (opus-recorder) spins up a worker.
+      "worker-src 'self' blob:",
+      "object-src 'none'",
       "font-src 'self' data:",
       // Supabase REST + realtime (WSS). All Meta API calls happen
       // server-side, so graph.facebook.com does not belong here.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      `connect-src 'self' ${SUPABASE.http} ${SUPABASE.ws}`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -68,6 +118,8 @@ const APP_LOCALE = ["en", "pt", "es", "ko"].includes(process.env.NEXT_PUBLIC_APP
   : "en";
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in an `X-Powered-By` header.
+  poweredByHeader: false,
   turbopack: {
     resolveAlias: {
       "@app-messages": `./messages/${APP_LOCALE}.json`,
@@ -155,6 +207,12 @@ const nextConfig: NextConfig = {
         // assets (nosniff matters there) and /api/* (HSTS + referrer-
         // policy don't hurt).
         source: "/:path*",
+        headers: [...SECURITY_HEADERS],
+      },
+      {
+        // `/:path*` does not match the bare root in every matcher mode;
+        // the root (which redirects to /dashboard) gets the same set.
+        source: "/",
         headers: [...SECURITY_HEADERS],
       },
     ];

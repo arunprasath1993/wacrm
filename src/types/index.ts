@@ -297,6 +297,8 @@ export interface MessageReaction {
 export interface WhatsAppConfig {
   id: string;
   user_id: string;
+  /** API provider adapter id (migration 061); default 'meta_cloud'. */
+  provider?: string;
   phone_number_id: string;
   waba_id?: string;
   access_token: string;
@@ -419,6 +421,8 @@ export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'repli
 export interface Broadcast {
   id: string;
   user_id: string;
+  /** The app this campaign was sent for (migration 060); null = none. */
+  app_id?: string | null;
   name: string;
   template_name: string;
   template_language: string;
@@ -708,6 +712,30 @@ export interface QuickReply {
   content_text?: string | null;
   /** Set when `kind === 'interactive'`. */
   interactive_payload?: InteractiveMessagePayload | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * A product marketed through this CRM (migration 060) — e.g. "Nixie CRM"
+ * or a payment app. Membership is tag-based: a contact belongs to an app
+ * when it carries `tag_id`, so every tag-aware feature works per app.
+ */
+export interface CrmApp {
+  id: string;
+  account_id: string;
+  created_by: string | null;
+  name: string;
+  slug: string;
+  color: string;
+  icon: string | null;
+  description: string | null;
+  website_url: string | null;
+  signup_url: string | null;
+  tag_id: string | null;
+  pipeline_id: string | null;
+  position: number;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }

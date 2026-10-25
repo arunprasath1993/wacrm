@@ -14,6 +14,7 @@
  */
 
 export const THEME_IDS = [
+  "nixie",
   "violet",
   "emerald",
   "cobalt",
@@ -23,9 +24,9 @@ export const THEME_IDS = [
 
 export type ThemeId = (typeof THEME_IDS)[number];
 
-export const DEFAULT_THEME: ThemeId = "violet";
+export const DEFAULT_THEME: ThemeId = "nixie";
 
-export const STORAGE_KEY = "wacrm.theme";
+export const STORAGE_KEY = "nixie-wa.theme";
 
 /**
  * MODE — the light/dark dimension, orthogonal to the accent theme.
@@ -45,7 +46,7 @@ export type Mode = (typeof MODES)[number];
 
 export const DEFAULT_MODE: Mode = "dark";
 
-export const MODE_STORAGE_KEY = "wacrm.mode";
+export const MODE_STORAGE_KEY = "nixie-wa.mode";
 
 export function isMode(value: unknown): value is Mode {
   return (
@@ -68,9 +69,15 @@ export interface ThemeMeta {
 
 export const THEMES: ReadonlyArray<ThemeMeta> = [
   {
+    id: "nixie",
+    name: "Nixie",
+    tagline: "The default — clear-water teal on deep-water ink.",
+    swatch: "oklch(0.66 0.12 183)",
+  },
+  {
     id: "violet",
     name: "Violet",
-    tagline: "The default — confident, slightly playful.",
+    tagline: "Confident, slightly playful.",
     swatch: "oklch(0.526 0.247 293)",
   },
   {

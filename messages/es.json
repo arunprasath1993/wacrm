@@ -14,7 +14,8 @@
     "noAccount": "¿No tienes una cuenta?",
     "createAccount": "Crear cuenta",
     "linkExpired": "Ese enlace expiró. Para restablecer la contraseña, usa “¿Olvidaste tu contraseña?” y pide uno nuevo; si estabas confirmando tu correo, regístrate de nuevo.",
-    "linkInvalid": "No se pudo iniciar sesión con ese enlace. Si estabas confirmando tu correo, es posible que ya esté verificado; inicia sesión abajo. Para restablecer la contraseña, pide un enlace nuevo y ábrelo en el mismo navegador desde el que lo solicitaste."
+    "linkInvalid": "No se pudo iniciar sesión con ese enlace. Si estabas confirmando tu correo, es posible que ya esté verificado; inicia sesión abajo. Para restablecer la contraseña, pide un enlace nuevo y ábrelo en el mismo navegador desde el que lo solicitaste.",
+    "privateHint": "This workspace is private. Ask your admin for a login — if they sent you an invite link, sign in from that link to join."
   },
   "Sidebar": {
     "title": "Plantilla de CRM para WhatsApp",
@@ -41,7 +42,11 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
-    "menuSignOut": "Cerrar sesión"
+    "menuSignOut": "Cerrar sesión",
+    "groupConversations": "Conversations",
+    "groupCustomers": "Customers",
+    "groupCampaigns": "Campaigns",
+    "help": "Help & guides"
   },
   "Header": {
     "dashboard": "Panel",
@@ -58,7 +63,10 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
-    "menuSignOut": "Cerrar sesión"
+    "menuSignOut": "Cerrar sesión",
+    "flows": "Flows",
+    "agents": "AI Agents",
+    "help": "Help & guides"
   },
   "ModeToggle": {
     "switchMode": "Cambiar al modo {mode}"
@@ -1964,7 +1972,8 @@
       "deals": "Negocios y moneda",
       "inbox": "Bandeja de entrada",
       "members": "Miembros del equipo",
-      "api": "Claves de API"
+      "api": "Claves de API",
+      "apps": "Apps"
     },
     "groups": {
       "account": "Cuenta",
@@ -2401,7 +2410,8 @@
       "createFlows": "crear flujos",
       "createPipelines": "crear pipelines",
       "createDeals": "crear negocios",
-      "sendMessages": "enviar mensajes"
+      "sendMessages": "enviar mensajes",
+      "editSettings": "change workspace settings"
     }
   },
   "Metadata": {
@@ -2923,5 +2933,82 @@
       "metaApiStatus": "Error de la API de Meta: {status}",
       "syncFailed": "Error al sincronizar las plantillas"
     }
+  },
+  "Apps": {
+    "allApps": "All apps",
+    "switcherLabel": "Switch app",
+    "switcherHint": "Show contacts, chats and campaigns for",
+    "manageApps": "Manage apps",
+    "addFirstApp": "Add your first app",
+    "panelTitle": "Apps",
+    "panelDesc": "The products you market from this WhatsApp number. Each app gets its own tag and, if you want, its own sales pipeline — pick an app in the top bar to focus every page on it.",
+    "newApp": "New app",
+    "emptyTitle": "No apps yet",
+    "emptyDesc": "Add Nixie CRM, your payment app, or anything else you sell. Contacts, chats, broadcasts and pipelines can then be filtered per app.",
+    "archivedTitle": "Archived",
+    "restore": "Restore",
+    "contacts": "Contacts",
+    "contactCount": "{count, plural, =0 {No contacts} =1 {1 contact} other {# contacts}}",
+    "tag": "Tag",
+    "tagMissing": "Tag deleted — edit to re-link",
+    "pipeline": "Pipeline",
+    "noPipeline": "None",
+    "website": "Website",
+    "appActions": "Actions for {name}",
+    "edit": "Edit",
+    "archive": "Archive",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "deleteTitle": "Delete {name}?",
+    "deleteDesc": "The app is removed from the switcher. Its tag, pipeline and contacts stay — delete those separately if you no longer need them.",
+    "deleteConfirm": "Delete app",
+    "createTitle": "New app",
+    "createDesc": "A product you'll market from this number.",
+    "editTitle": "Edit app",
+    "editDesc": "Changes apply everywhere the app appears.",
+    "fieldName": "Name",
+    "fieldNamePlaceholder": "Nixie CRM",
+    "fieldIcon": "Icon",
+    "fieldSlug": "Slug",
+    "fieldSlugHint": "Used by your app's sign-up form when it sends leads here. Lowercase letters, numbers and dashes.",
+    "fieldColor": "Colour",
+    "fieldDescription": "Description",
+    "fieldDescriptionPlaceholder": "Who it's for and what it does",
+    "fieldWebsite": "Website",
+    "fieldSignup": "Sign-up link",
+    "fieldPipeline": "Create a sales pipeline",
+    "fieldPipelineHint": "New lead → Contacted → Demo → Trial → Won / Lost",
+    "saveChanges": "Save changes",
+    "createApp": "Create app",
+    "errName": "Give the app a name.",
+    "errSlug": "Slug must start with a letter or number and use only a–z, 0–9 and dashes (max 40).",
+    "errSlugTaken": "Another app already uses this slug.",
+    "errUrl": "Links must start with http:// or https://.",
+    "errIcon": "Use one emoji or up to 4 characters for the icon.",
+    "toastCreated": "{name} created",
+    "toastUpdated": "{name} updated",
+    "toastArchived": "{name} archived",
+    "toastRestored": "{name} restored",
+    "toastDeleted": "{name} deleted",
+    "toastSaveFailed": "Couldn't save the app. Check your connection and try again.",
+    "toastDeleteFailed": "Couldn't delete the app. Try again.",
+    "captureTitle": "Send sign-ups from your app",
+    "captureDesc": "When someone registers in your product, post them here and they land in that app's contacts — existing contacts keep their other apps.",
+    "captureFoot": "Create the key in Settings → API keys with the contacts:write scope. Keep it on your server, never in browser code.",
+    "copy": "Copy",
+    "copyFailed": "Couldn't copy — select the text instead.",
+    "filterChip": "Showing {name} only",
+    "showAll": "Show all apps",
+    "overviewTitle": "Your apps",
+    "overviewEmpty": "Add the products you market to see each one's audience here.",
+    "overviewDesc": "Contacts per app — pick one to focus the whole CRM on it."
+  },
+  "Providers": {
+    "title": "WhatsApp API provider",
+    "subtitle": "Where your messages are sent from",
+    "official": "Official Meta provider",
+    "inUse": "In use",
+    "available": "Available",
+    "planned": "Coming later"
   }
 }

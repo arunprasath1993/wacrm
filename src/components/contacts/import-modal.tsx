@@ -119,12 +119,16 @@ interface ImportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported: () => void;
+  /** Tag names added to every imported row — e.g. the active app's
+   *  tag so a lead list imported under "Nixie CRM" joins that app. */
+  extraTagNames?: string[];
 }
 
 export function ImportModal({
   open,
   onOpenChange,
   onImported,
+  extraTagNames,
 }: ImportModalProps) {
   const t = useTranslations('Contacts.importModal');
   const supabase = createClient();
@@ -171,11 +175,23 @@ export function ImportModal({
     setResult(null);
 
     const text = await selected.text();
-    const {
-      rows,
-      hasTagsColumn: csvHasTags,
-      hasCompanyColumn: csvHasCompany,
-    } = parseContactCsv(text);
+    const parsed = parseContactCsv(text);
+    const { hasCompanyColumn: csvHasCompany } = parsed;
+    const extra = (extraTagNames ?? []).map((n) => n.trim()).filter(Boolean);
+    const csvHasTags = parsed.hasTagsColumn || extra.length > 0;
+    const rows =
+      extra.length === 0
+        ? parsed.rows
+        : parsed.rows.map((row) => {
+            const have = new Set(row.tagNames.map((n) => n.trim().toLowerCase()));
+            return {
+              ...row,
+              tagNames: [
+                ...row.tagNames,
+                ...extra.filter((n) => !have.has(n.toLowerCase())),
+              ],
+            };
+          });
 
     if (rows.length === 0) {
       toast.error(t('toastNoValidRows'));

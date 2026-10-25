@@ -35,6 +35,8 @@ export type VariableMapping =
   | { type: 'custom_field'; value: string };
 
 interface BroadcastPayload {
+  /** App the campaign is sent for (Settings → Apps); null/absent = none. */
+  appId?: string | null;
   name: string;
   template: MessageTemplate;
   audience: AudienceConfig;
@@ -307,6 +309,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .insert({
           user_id: user.id,
           account_id: accountId,
+          // Only sent when set, so the insert still works on a database
+          // that hasn't applied migration 060 yet.
+          ...(payload.appId ? { app_id: payload.appId } : {}),
           name: payload.name,
           template_name: payload.template.name,
           template_language: payload.template.language ?? 'en_US',

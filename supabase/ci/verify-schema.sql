@@ -163,6 +163,23 @@ BEGIN
     RAISE EXCEPTION 'anon can execute dashboard_overview — migration 059 grants are wrong';
   END IF;
 
+  -- Multi-app marketing (060) and provider column (061).
+  IF to_regclass('public.crm_apps') IS NULL THEN
+    RAISE EXCEPTION 'public.crm_apps is missing — migration 060 did not apply';
+  END IF;
+  IF to_regprocedure('public.create_crm_app(text,text,text,text,text,text,text,boolean)') IS NULL THEN
+    RAISE EXCEPTION 'public.create_crm_app is missing — migration 060 did not apply';
+  END IF;
+  IF has_function_privilege('anon', 'public.create_crm_app(text,text,text,text,text,text,text,boolean)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'anon can execute create_crm_app — migration 060 grants are wrong';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'whatsapp_config' AND column_name = 'provider'
+  ) THEN
+    RAISE EXCEPTION 'whatsapp_config.provider is missing — migration 061 did not apply';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;

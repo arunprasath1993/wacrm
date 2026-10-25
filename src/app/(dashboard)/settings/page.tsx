@@ -19,6 +19,7 @@ import { DealsSettings } from '@/components/settings/deals-settings';
 import { InboxSettings } from '@/components/settings/inbox-settings';
 import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
+import { AppsSettings } from '@/components/settings/apps-settings';
 import {
   resolveSection,
   type SettingsSection,
@@ -76,6 +77,7 @@ function SettingsPageInner() {
     security: <SecurityPanel />,
     appearance: <AppearancePanel />,
     whatsapp: <WhatsAppConfig />,
+    apps: <AppsSettings />,
     templates: <TemplateManager />,
     'quick-replies': <QuickRepliesManager />,
     fields: <FieldsAndTagsPanel />,

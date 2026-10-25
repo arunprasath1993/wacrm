@@ -37,6 +37,9 @@ interface ContactFormProps {
   /** Open an existing contact's detail view — used by the duplicate
    *  notice to jump to the contact that already owns this number. */
   onViewExisting?: (contactId: string) => void;
+  /** Tags pre-selected for a NEW contact — e.g. the active app's tag,
+   *  so a lead added while "Nixie CRM" is picked joins that app. */
+  defaultTagIds?: string[];
 }
 
 export function ContactForm({
@@ -46,6 +49,7 @@ export function ContactForm({
   contactTags = [],
   onSaved,
   onViewExisting,
+  defaultTagIds,
 }: ContactFormProps) {
   const t = useTranslations('Contacts.form');
   const supabase = createClient();
@@ -77,7 +81,9 @@ export function ContactForm({
       setPhone(contact?.phone ?? '');
       setEmail(contact?.email ?? '');
       setCompany(contact?.company ?? '');
-      setSelectedTagIds(contactTags.map((ct) => ct.tag_id));
+      setSelectedTagIds(
+        contact ? contactTags.map((ct) => ct.tag_id) : (defaultTagIds ?? []),
+      );
       setDupMatch(null);
       fetchTags();
     }

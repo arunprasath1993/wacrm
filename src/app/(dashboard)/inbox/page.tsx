@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useCallback, useEffect, useRef } from "react";
+import { Suspense, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { createClient } from "@/lib/supabase/client";
@@ -8,6 +8,9 @@ import {
   CONVERSATION_SELECT,
   normalizeConversation,
 } from "@/lib/inbox/conversations";
+import { useApps } from "@/hooks/use-apps";
+import { fetchTaggedContactIds } from "@/lib/broadcast-audience";
+import { ActiveAppNotice } from "@/components/apps/active-app-notice";
 import type { Conversation, Message, Contact, ConversationStatus } from "@/types";
 import { useRealtime } from "@/hooks/use-realtime";
 import { ConversationList } from "@/components/inbox/conversation-list";
@@ -51,6 +54,38 @@ function InboxPageInner() {
   const deepLinkConvId = searchParams.get("c");
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
+
+  // App switcher: when an app is picked, only chats with that app's
+  // contacts are listed. The member set is re-read when the app changes
+  // or a new conversation appears (a brand-new lead may have just been
+  // tagged), not on every message.
+  const { activeTagId } = useApps();
+  const [appContactIds, setAppContactIds] = useState<Set<string> | null>(null);
+  const conversationCount = conversations.length;
+  useEffect(() => {
+    if (!activeTagId) {
+      setAppContactIds(null);
+      return;
+    }
+    let cancelled = false;
+    fetchTaggedContactIds(createClient(), [activeTagId])
+      .then((ids) => {
+        if (!cancelled) setAppContactIds(ids);
+      })
+      .catch(() => {
+        if (!cancelled) setAppContactIds(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTagId, conversationCount]);
+  const visibleConversations = useMemo(
+    () =>
+      appContactIds
+        ? conversations.filter((c) => appContactIds.has(c.contact_id))
+        : conversations,
+    [conversations, appContactIds],
+  );
   const [activeConversation, setActiveConversation] =
     useState<Conversation | null>(null);
   const [activeContact, setActiveContact] = useState<Contact | null>(null);
@@ -566,7 +601,9 @@ function InboxPageInner() {
   const hasActiveConv = !!activeConversation;
 
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden sm:-m-6">
+    // Full-bleed: cancels the shell's <main> padding (p-4 / sm:p-6 /
+    // lg:p-8) and fills the viewport under the 4rem header.
+    <div className="-m-4 flex h-[calc(100dvh-4rem)] flex-col overflow-hidden sm:-m-6 lg:-m-8">
       {/* WhatsApp connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}
       {whatsappConnected === false && (
@@ -578,6 +615,11 @@ function InboxPageInner() {
         </div>
       )}
 
+      {appContactIds && (
+        <div className="flex shrink-0 items-center border-b border-border px-4 py-2">
+          <ActiveAppNotice />
+        </div>
+      )}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: Conversation list.
             Hidden on mobile when a conversation is selected so the
@@ -591,7 +633,7 @@ function InboxPageInner() {
           <ConversationList
             activeConversationId={activeConversation?.id ?? null}
             onSelect={handleSelectConversation}
-            conversations={conversations}
+            conversations={visibleConversations}
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={resyncToken}
             initialFilter={parseInboxFilter(searchParams.get("filter"))}

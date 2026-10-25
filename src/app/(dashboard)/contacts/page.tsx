@@ -57,6 +57,8 @@ import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { useTranslations } from 'next-intl';
+import { useApps } from '@/hooks/use-apps';
+import { ActiveAppNotice } from '@/components/apps/active-app-notice';
 
 const PAGE_SIZE = 25;
 
@@ -70,6 +72,9 @@ export default function ContactsPage() {
   const supabase = createClient();
   const canEdit = useCan('send-messages');
   const canEditSettings = useCan('edit-settings');
+  // App switcher: when an app is picked, the list is that app's
+  // contacts (its tag) — any tag filter then narrows within the app.
+  const { activeTagId, activeApp } = useApps();
 
   const [contacts, setContacts] = useState<ContactWithTags[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,7 +139,24 @@ export default function ContactsPage() {
     let contactRows: Contact[];
     let count: number;
 
-    if (selectedTagIds.length > 0) {
+    if (activeTagId) {
+      const { data, error } = await supabase.rpc('filter_contacts_for_app', {
+        p_app_tag_id: activeTagId,
+        p_tag_ids: selectedTagIds.filter((id) => id !== activeTagId),
+        p_search: term || null,
+        p_limit: PAGE_SIZE,
+        p_offset: from,
+      });
+      if (seq !== fetchSeq.current) return; // superseded by a newer fetch
+      if (error) {
+        toast.error(t('toastFailedLoad'));
+        setLoading(false);
+        return;
+      }
+      const rows = (data ?? []) as { contact: Contact; total_count: number }[];
+      contactRows = rows.map((r) => r.contact);
+      count = rows.length > 0 ? Number(rows[0].total_count) : 0;
+    } else if (selectedTagIds.length > 0) {
       // Tag filter active — resolve it server-side (join + distinct +
       // windowed total count + pagination) so a tag covering many
       // contacts can't silently truncate the result or overflow an IN
@@ -208,7 +230,13 @@ export default function ContactsPage() {
 
     setContacts(enriched);
     setLoading(false);
-  }, [supabase, page, search, selectedTagIds, tagsMap, t]);
+  }, [supabase, page, search, selectedTagIds, tagsMap, t, activeTagId]);
+
+  // Switching app changes the result set — start from the first page.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPage(0);
+  }, [activeTagId]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not
@@ -345,7 +373,7 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {totalCount > 0 ? t('subtitle', { count: totalCount }) : t('subtitleZero')}
           </p>
@@ -382,6 +410,8 @@ export default function ContactsPage() {
           </GatedButton>
         </div>
       </div>
+
+      <ActiveAppNotice />
 
       {/* Search + tag filter */}
       <div className="space-y-2">
@@ -736,6 +766,7 @@ export default function ContactsPage() {
         onOpenChange={setFormOpen}
         contact={editContact}
         contactTags={editContactTags}
+        defaultTagIds={activeTagId ? [activeTagId] : undefined}
         onSaved={() => {
           fetchContacts();
           fetchTags();
@@ -757,6 +788,7 @@ export default function ContactsPage() {
       {/* Import Modal */}
       <ImportModal
         open={importOpen}
+        extraTagNames={activeApp && activeTagId && tagsMap[activeTagId] ? [tagsMap[activeTagId].name] : undefined}
         onOpenChange={setImportOpen}
         onImported={fetchContacts}
       />

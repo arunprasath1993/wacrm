@@ -122,7 +122,7 @@ export function MessageVolumeCard({ data }: { data: DashboardOverview | null }) 
                 data={timeData}
                 index="label"
                 categories={[incomingLabel, outgoingLabel]}
-                colors={['teal', 'violet']}
+                colors={['teal', 'blue']}
                 type="stacked"
                 yAxisWidth={36}
                 legendPosition="right"

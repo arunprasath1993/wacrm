@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getSignupMode, isSignupAllowed } from '@/lib/auth/signup-mode'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -69,10 +70,24 @@ export async function middleware(request: NextRequest) {
     return withRefreshedCookies(NextResponse.redirect(url))
   }
 
+  // Sign-up gate (NEXT_PUBLIC_SIGNUP_MODE, default "closed"). A private
+  // marketing CRM should not hand out logins to whoever finds the URL,
+  // so /signup bounces to /login unless the mode allows it. An invite
+  // token rides along so the visitor can sign in and accept it.
+  if (request.nextUrl.pathname === '/signup') {
+    const inviteToken = request.nextUrl.searchParams.get('invite')
+    if (!isSignupAllowed(getSignupMode(), inviteToken)) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      url.search = inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ''
+      return withRefreshedCookies(NextResponse.redirect(url))
+    }
+  }
+
   // Protected pages - redirect to login if not authenticated
   // Every top-level route under src/app/(dashboard)/ belongs here —
   // middleware.test.ts reads that directory and fails on a missing one.
-  const protectedPaths = ['/dashboard', '/inbox', '/contacts', '/pipelines', '/broadcasts', '/automations', '/flows', '/agents', '/notifications', '/settings']
+  const protectedPaths = ['/dashboard', '/inbox', '/contacts', '/pipelines', '/broadcasts', '/automations', '/flows', '/agents', '/notifications', '/settings', '/help']
   if (!user && protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'

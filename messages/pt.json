@@ -14,7 +14,8 @@
     "noAccount": "Não tem uma conta?",
     "createAccount": "Criar conta",
     "linkExpired": "Esse link expirou. Para redefinir a senha, use “Esqueceu a senha?” para pedir um novo; se estava confirmando seu e-mail, cadastre-se novamente.",
-    "linkInvalid": "Não foi possível entrar com esse link. Se estava confirmando seu e-mail, ele já pode estar verificado — basta entrar abaixo. Para redefinir a senha, peça um novo link e abra-o no mesmo navegador em que o solicitou."
+    "linkInvalid": "Não foi possível entrar com esse link. Se estava confirmando seu e-mail, ele já pode estar verificado — basta entrar abaixo. Para redefinir a senha, peça um novo link e abra-o no mesmo navegador em que o solicitou.",
+    "privateHint": "This workspace is private. Ask your admin for a login — if they sent you an invite link, sign in from that link to join."
   },
   "Sidebar": {
     "title": "Modelo de CRM para WhatsApp",
@@ -41,7 +42,11 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair"
+    "menuSignOut": "Sair",
+    "groupConversations": "Conversations",
+    "groupCustomers": "Customers",
+    "groupCampaigns": "Campaigns",
+    "help": "Help & guides"
   },
   "Header": {
     "dashboard": "Painel",
@@ -58,7 +63,10 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair"
+    "menuSignOut": "Sair",
+    "flows": "Flows",
+    "agents": "AI Agents",
+    "help": "Help & guides"
   },
   "ModeToggle": {
     "switchMode": "Mudar para o modo {mode}"
@@ -1964,7 +1972,8 @@
       "deals": "Negócios e moeda",
       "inbox": "Caixa de entrada",
       "members": "Membros da equipe",
-      "api": "Chaves de API"
+      "api": "Chaves de API",
+      "apps": "Apps"
     },
     "groups": {
       "account": "Conta",
@@ -2401,7 +2410,8 @@
       "createFlows": "criar fluxos",
       "createPipelines": "criar pipelines",
       "createDeals": "criar negócios",
-      "sendMessages": "enviar mensagens"
+      "sendMessages": "enviar mensagens",
+      "editSettings": "change workspace settings"
     }
   },
   "Metadata": {
@@ -2923,5 +2933,82 @@
       "metaApiStatus": "Erro da API da Meta: {status}",
       "syncFailed": "Falha ao sincronizar os modelos"
     }
+  },
+  "Apps": {
+    "allApps": "All apps",
+    "switcherLabel": "Switch app",
+    "switcherHint": "Show contacts, chats and campaigns for",
+    "manageApps": "Manage apps",
+    "addFirstApp": "Add your first app",
+    "panelTitle": "Apps",
+    "panelDesc": "The products you market from this WhatsApp number. Each app gets its own tag and, if you want, its own sales pipeline — pick an app in the top bar to focus every page on it.",
+    "newApp": "New app",
+    "emptyTitle": "No apps yet",
+    "emptyDesc": "Add Nixie CRM, your payment app, or anything else you sell. Contacts, chats, broadcasts and pipelines can then be filtered per app.",
+    "archivedTitle": "Archived",
+    "restore": "Restore",
+    "contacts": "Contacts",
+    "contactCount": "{count, plural, =0 {No contacts} =1 {1 contact} other {# contacts}}",
+    "tag": "Tag",
+    "tagMissing": "Tag deleted — edit to re-link",
+    "pipeline": "Pipeline",
+    "noPipeline": "None",
+    "website": "Website",
+    "appActions": "Actions for {name}",
+    "edit": "Edit",
+    "archive": "Archive",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "deleteTitle": "Delete {name}?",
+    "deleteDesc": "The app is removed from the switcher. Its tag, pipeline and contacts stay — delete those separately if you no longer need them.",
+    "deleteConfirm": "Delete app",
+    "createTitle": "New app",
+    "createDesc": "A product you'll market from this number.",
+    "editTitle": "Edit app",
+    "editDesc": "Changes apply everywhere the app appears.",
+    "fieldName": "Name",
+    "fieldNamePlaceholder": "Nixie CRM",
+    "fieldIcon": "Icon",
+    "fieldSlug": "Slug",
+    "fieldSlugHint": "Used by your app's sign-up form when it sends leads here. Lowercase letters, numbers and dashes.",
+    "fieldColor": "Colour",
+    "fieldDescription": "Description",
+    "fieldDescriptionPlaceholder": "Who it's for and what it does",
+    "fieldWebsite": "Website",
+    "fieldSignup": "Sign-up link",
+    "fieldPipeline": "Create a sales pipeline",
+    "fieldPipelineHint": "New lead → Contacted → Demo → Trial → Won / Lost",
+    "saveChanges": "Save changes",
+    "createApp": "Create app",
+    "errName": "Give the app a name.",
+    "errSlug": "Slug must start with a letter or number and use only a–z, 0–9 and dashes (max 40).",
+    "errSlugTaken": "Another app already uses this slug.",
+    "errUrl": "Links must start with http:// or https://.",
+    "errIcon": "Use one emoji or up to 4 characters for the icon.",
+    "toastCreated": "{name} created",
+    "toastUpdated": "{name} updated",
+    "toastArchived": "{name} archived",
+    "toastRestored": "{name} restored",
+    "toastDeleted": "{name} deleted",
+    "toastSaveFailed": "Couldn't save the app. Check your connection and try again.",
+    "toastDeleteFailed": "Couldn't delete the app. Try again.",
+    "captureTitle": "Send sign-ups from your app",
+    "captureDesc": "When someone registers in your product, post them here and they land in that app's contacts — existing contacts keep their other apps.",
+    "captureFoot": "Create the key in Settings → API keys with the contacts:write scope. Keep it on your server, never in browser code.",
+    "copy": "Copy",
+    "copyFailed": "Couldn't copy — select the text instead.",
+    "filterChip": "Showing {name} only",
+    "showAll": "Show all apps",
+    "overviewTitle": "Your apps",
+    "overviewEmpty": "Add the products you market to see each one's audience here.",
+    "overviewDesc": "Contacts per app — pick one to focus the whole CRM on it."
+  },
+  "Providers": {
+    "title": "WhatsApp API provider",
+    "subtitle": "Where your messages are sent from",
+    "official": "Official Meta provider",
+    "inUse": "In use",
+    "available": "Available",
+    "planned": "Coming later"
   }
 }

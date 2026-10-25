@@ -138,3 +138,32 @@ describe("middleware — every dashboard route requires a session", () => {
     expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
   });
 });
+
+describe("middleware — sign-up gate", () => {
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_SIGNUP_MODE;
+  });
+
+  it("bounces /signup to /login when sign-up is closed (default)", async () => {
+    const res = await middleware(new NextRequest("https://crm.test/signup"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("https://crm.test/login");
+  });
+
+  it("keeps the invite token when bouncing a closed /signup", async () => {
+    const res = await middleware(new NextRequest("https://crm.test/signup?invite=abc"));
+    expect(res.headers.get("location")).toBe("https://crm.test/login?invite=abc");
+  });
+
+  it("lets an invited visitor through in invite mode", async () => {
+    process.env.NEXT_PUBLIC_SIGNUP_MODE = "invite";
+    const res = await middleware(new NextRequest("https://crm.test/signup?invite=abc"));
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("serves /signup to anyone in open mode", async () => {
+    process.env.NEXT_PUBLIC_SIGNUP_MODE = "open";
+    const res = await middleware(new NextRequest("https://crm.test/signup"));
+    expect(res.headers.get("location")).toBeNull();
+  });
+});

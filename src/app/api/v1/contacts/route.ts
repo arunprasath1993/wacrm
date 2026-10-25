@@ -26,6 +26,7 @@ import {
   ContactError,
   contactSearchFilter,
 } from '@/lib/api/v1/contacts';
+import { addContactToApp, resolveAppBySlug } from '@/lib/apps/resolve-app';
 
 export async function GET(request: Request) {
   try {
@@ -33,9 +34,17 @@ export async function GET(request: Request) {
     const { limit, cursor } = parseListParams(request);
     const url = new URL(request.url);
     const searchFilter = contactSearchFilter(url.searchParams.get('search') ?? '');
-    const tag = url.searchParams.get('tag');
+    let tag = url.searchParams.get('tag');
     if (tag && !isUuid(tag)) {
       return fail('bad_request', "'tag' must be a tag id (UUID)", 400);
+    }
+    // `?app=<slug>` — contacts that belong to an app (its tag).
+    const appSlug = url.searchParams.get('app');
+    if (appSlug) {
+      if (tag) {
+        return fail('bad_request', "Use either 'tag' or 'app', not both", 400);
+      }
+      tag = (await resolveAppBySlug(ctx.supabase, ctx.accountId, appSlug)).tagId;
     }
 
     // When filtering by tag, add an aliased INNER join on contact_tags
@@ -87,6 +96,13 @@ export async function GET(request: Request) {
       nextCursor
     );
   } catch (err) {
+    if (err instanceof ContactError) {
+      return fail(
+        err.status === 400 ? 'bad_request' : 'internal',
+        err.message,
+        err.status
+      );
+    }
     return toApiErrorResponse(err);
   }
 }
@@ -107,6 +123,18 @@ export async function POST(request: Request) {
     if (!phone) {
       return fail('bad_request', "'phone' is required", 400);
     }
+
+    // `app` (slug) is ADDITIVE: it joins the contact to that app and
+    // leaves every other tag alone — unlike `tags`, which replaces the
+    // set. Resolved before the contact is touched so a bad slug writes
+    // nothing.
+    if (body.app !== undefined && typeof body.app !== 'string') {
+      return fail('bad_request', "'app' must be a string (app slug)", 400);
+    }
+    const app =
+      typeof body.app === 'string' && body.app.trim()
+        ? await resolveAppBySlug(ctx.supabase, ctx.accountId, body.app)
+        : null;
 
     const auditUserId = await resolveAuditUserId(ctx.supabase, ctx.accountId);
 
@@ -130,6 +158,10 @@ export async function POST(request: Request) {
         id,
         body.tags.filter((t): t is string => typeof t === 'string')
       );
+    }
+
+    if (app) {
+      await addContactToApp(ctx.supabase, ctx.accountId, id, app);
     }
 
     const contact = await getContactById(ctx.supabase, ctx.accountId, id);

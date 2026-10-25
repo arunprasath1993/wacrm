@@ -1,4 +1,30 @@
-# wacrm — CRM Template for WhatsApp
+# Nixie WA-CRM
+
+> Private WhatsApp CRM for **Shiny Software Services** — one official
+> WhatsApp number marketing several products (Nixie CRM, MoneyCtrl and
+> future apps). Forked from [ArnasDon/wacrm](https://github.com/ArnasDon/wacrm)
+> (MIT).
+
+**Deploy guide (Tanglish):** [docs/DEPLOY-HOSTINGER-TAMIL.md](./docs/DEPLOY-HOSTINGER-TAMIL.md)
+
+## What this fork adds
+
+| Area | Change |
+| --- | --- |
+| **Apps** | Settings → Apps: one entry per product, each with its own tag and optional sales pipeline. A switcher in the top bar scopes Contacts, Inbox, Broadcasts and Pipelines to one app; the page's top edge carries the app colour. New contacts, CSV imports and campaigns made while an app is selected are tagged to it. Dashboard shows audience per app. Migration `060_crm_apps.sql`. |
+| **Lead capture API** | `POST /api/v1/contacts` accepts `"app": "<slug>"` — additive, never strips other apps — and `GET ?app=<slug>` filters. See [docs/public-api.md](./docs/public-api.md). |
+| **Providers** | `whatsapp_config.provider` + an adapter layer (`src/lib/whatsapp/providers`). Meta Cloud API in use; Gupshup, Interakt, AiSensy, Twilio, 360dialog listed as planned. See [docs/whatsapp-providers.md](./docs/whatsapp-providers.md). Migration `061_whatsapp_provider.sql`. |
+| **Help center** | `?` button on every page opens that page's guide; `/help` lists all guides with search. Every guide is written in **Tamil and English** with a one-click toggle. |
+| **Security & privacy** | Sign-up closed by default (`NEXT_PUBLIC_SIGNUP_MODE`); `robots.txt` disallows everything; `X-Robots-Tag: noindex` on every response; CSP enforced (with a report-only escape hatch); COOP; `X-Powered-By` removed. |
+| **Design** | "Deep water" theme (Nixie teal + turmeric signal), ink sidebar grouped by job, self-hosted Anek Tamil + Mukta Malar fonts (no build-time Google Fonts fetch), redesigned sign-in, bilingual auth panel, fixed invisible checkboxes, Tamil (`ta`) template language. Brand name/company via env. |
+
+Tests: `npm test` (1,700+ unit tests). Database behaviour of the new
+RLS policies and RPCs: `supabase/manual-tests/060_crm_apps.test.sql` (run against
+a local Supabase — instructions in the file). Upstream README follows.
+
+---
+
+## Upstream: wacrm — CRM Template for WhatsApp
 
 > Self-hostable CRM template for WhatsApp® — shared inbox, contacts,
 > sales pipelines, broadcasts, and no-code automations. Fork it, brand

@@ -97,9 +97,10 @@ const emptyForm: TemplateFormData = {
 };
 
 const COMMON_LANGUAGE_CODES = [
+  'ta',
+  'en',
   'en_US',
   'en_GB',
-  'en',
   'es',
   'es_ES',
   'es_MX',

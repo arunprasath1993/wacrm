@@ -33,3 +33,30 @@ describe("next.config Cache-Control", () => {
     },
   );
 });
+
+describe("next.config privacy + hardening headers", () => {
+  async function headerFor(pathname: string, key: string) {
+    const rules = (await nextConfig.headers?.()) ?? [];
+    return rules
+      .filter((rule) => getPathMatch(rule.source, { strict: true })(pathname))
+      .flatMap((rule) => rule.headers)
+      .find((header) => header.key.toLowerCase() === key.toLowerCase())?.value;
+  }
+
+  it.each(["/", "/login", "/dashboard", "/api/v1/contacts", "/_next/static/chunks/app.js"])(
+    "marks %s as noindex for every crawler",
+    async (pathname) => {
+      expect(await headerFor(pathname, "X-Robots-Tag")).toMatch(/noindex/);
+    },
+  );
+
+  it("enforces the CSP by default", async () => {
+    expect(await headerFor("/dashboard", "Content-Security-Policy")).toMatch(
+      /frame-ancestors 'none'/,
+    );
+  });
+
+  it("does not send X-Powered-By", () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
+});

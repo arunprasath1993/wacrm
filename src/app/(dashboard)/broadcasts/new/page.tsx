@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
@@ -13,6 +13,8 @@ import { Step4ScheduleSend } from '@/components/broadcasts/step4-schedule-send';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
 import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useApps } from '@/hooks/use-apps';
+import { ActiveAppNotice } from '@/components/apps/active-app-notice';
 
 const steps = [
   { label: 'template', key: 'template' },
@@ -46,11 +48,26 @@ export default function NewBroadcastPage() {
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [name, setName] = useState('');
 
+  // Campaign for the app picked in the top bar: its tag becomes the
+  // starting audience (still editable in step 2) and the broadcast is
+  // recorded against the app for the per-app campaign list.
+  const { activeApp, activeTagId } = useApps();
+  const seededForTag = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeTagId || seededForTag.current === activeTagId) return;
+    seededForTag.current = activeTagId;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAudience((prev) =>
+      prev.type === 'all' ? { type: 'tags', tagIds: [activeTagId] } : prev,
+    );
+  }, [activeTagId]);
+
   async function handleSend() {
     if (!template) return;
 
     try {
       const broadcastId = await createAndSendBroadcast({
+        appId: activeApp?.id ?? null,
         name,
         template,
         audience: {
@@ -104,6 +121,7 @@ export default function NewBroadcastPage() {
     const { error } = await supabase.from('broadcasts').insert({
       user_id: user.id,
       account_id: accountId,
+      ...(activeApp ? { app_id: activeApp.id } : {}),
       name: name.trim(),
       template_name: template.name,
       template_language: template.language ?? 'en_US',
@@ -133,10 +151,11 @@ export default function NewBroadcastPage() {
     <div className="mx-auto max-w-3xl space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+        <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground">{t('title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t('subtitle')}
         </p>
+        <ActiveAppNotice className="mt-3" />
       </div>
 
       {/* Step Indicator */}

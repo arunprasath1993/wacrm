@@ -30,6 +30,7 @@ import { useCan } from "@/hooks/use-can";
 import { useAuth } from "@/hooks/use-auth";
 import { GatedButton } from "@/components/ui/gated-button";
 import { useTranslations } from "next-intl";
+import { useApps } from "@/hooks/use-apps";
 
 // Pipeline creation is admin-class (settings-tier write under
 // the new RLS); deal creation is operational and only requires
@@ -57,6 +58,11 @@ export default function PipelinesPage() {
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
+
+  // When an app with its own pipeline is picked in the top bar, open
+  // that pipeline (the dropdown still switches to any other).
+  const { activeApp } = useApps();
+  const appPipelineId = activeApp?.pipeline_id ?? null;
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +166,11 @@ export default function PipelinesPage() {
       setPipelines(list);
       if (list.length > 0) {
         setSelectedPipelineId((prev) =>
-          prev && list.some((p) => p.id === prev) ? prev : list[0].id,
+          appPipelineId && list.some((p) => p.id === appPipelineId)
+            ? appPipelineId
+            : prev && list.some((p) => p.id === prev)
+              ? prev
+              : list[0].id,
         );
       } else {
         setSelectedPipelineId("");
@@ -171,6 +181,14 @@ export default function PipelinesPage() {
       cancelled = true;
     };
   }, [loadPipelines, seedDefaultPipeline]);
+
+  // Follow the app switcher after the first load too.
+  useEffect(() => {
+    if (appPipelineId && pipelines.some((p) => p.id === appPipelineId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedPipelineId(appPipelineId);
+    }
+  }, [appPipelineId, pipelines]);
 
   // Load stages + deals whenever selected pipeline changes.
   // Clearing on no-selection is a legitimate sync with URL/prop
