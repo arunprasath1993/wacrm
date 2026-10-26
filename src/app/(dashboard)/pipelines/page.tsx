@@ -26,21 +26,43 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GitBranch, Plus, ChevronDown, Settings } from "lucide-react";
 import { toast } from "sonner";
+import { useCan } from "@/hooks/use-can";
+import { useAuth } from "@/hooks/use-auth";
+import { GatedButton } from "@/components/ui/gated-button";
+import { useTranslations } from "next-intl";
+import { useApps } from "@/hooks/use-apps";
 
-// Spec-defined seed — name and color per the product spec.
+// Pipeline creation is admin-class (settings-tier write under
+// the new RLS); deal creation is operational and only requires
+// agent+. The two CTAs gate on different `useCan` capabilities,
+// not on different copy.
+
+// Spec-defined seed — name and color per the product spec. Names are
+// message keys under `Pipelines.page.defaultStages` so the seeded
+// stages come out in the UI language.
 const SPEC_DEFAULT_STAGES = [
-  { name: "New Lead", color: "#3b82f6", position: 0 }, // blue
-  { name: "Qualified", color: "#eab308", position: 1 }, // yellow
-  { name: "Proposal Sent", color: "#f97316", position: 2 }, // orange
-  { name: "Negotiation", color: "#8b5cf6", position: 3 }, // purple
-  { name: "Won", color: "#22c55e", position: 4 }, // green
-];
+  { nameKey: "newLead", color: "#3b82f6", position: 0 }, // blue
+  { nameKey: "qualified", color: "#eab308", position: 1 }, // yellow
+  { nameKey: "proposalSent", color: "#f97316", position: 2 }, // orange
+  { nameKey: "negotiation", color: "#8b5cf6", position: 3 }, // purple
+  { nameKey: "won", color: "#22c55e", position: 4 }, // green
+] as const;
 
 export default function PipelinesPage() {
+  const t = useTranslations("Pipelines.page");
+  const tGate = useTranslations("GatedButton");
   const supabase = createClient();
+  const canEditSettings = useCan("edit-settings");
+  const canCreateDeals = useCan("send-messages");
+  const { accountId } = useAuth();
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>("");
+
+  // When an app with its own pipeline is picked in the top bar, open
+  // that pipeline (the dropdown still switches to any other).
+  const { activeApp } = useApps();
+  const appPipelineId = activeApp?.pipeline_id ?? null;
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,10 +124,12 @@ export default function PipelinesPage() {
     } = await supabase.auth.getSession();
     const user = session?.user;
     if (!user) return null;
+    // pipelines.account_id is NOT NULL post-017 with no DB default.
+    if (!accountId) return null;
 
     const { data: pipeline, error } = await supabase
       .from("pipelines")
-      .insert({ user_id: user.id, name: "Sales Pipeline" })
+      .insert({ user_id: user.id, account_id: accountId, name: t("defaultPipelineName") })
       .select()
       .single();
 
@@ -116,14 +140,14 @@ export default function PipelinesPage() {
 
     const stagesPayload = SPEC_DEFAULT_STAGES.map((s) => ({
       pipeline_id: pipeline.id,
-      name: s.name,
+      name: t(`defaultStages.${s.nameKey}`),
       color: s.color,
       position: s.position,
     }));
     await supabase.from("pipeline_stages").insert(stagesPayload);
 
     return pipeline as Pipeline;
-  }, [supabase]);
+  }, [supabase, accountId, t]);
 
   // Initial load + seed-if-empty
   useEffect(() => {
@@ -142,7 +166,11 @@ export default function PipelinesPage() {
       setPipelines(list);
       if (list.length > 0) {
         setSelectedPipelineId((prev) =>
-          prev && list.some((p) => p.id === prev) ? prev : list[0].id,
+          appPipelineId && list.some((p) => p.id === appPipelineId)
+            ? appPipelineId
+            : prev && list.some((p) => p.id === prev)
+              ? prev
+              : list[0].id,
         );
       } else {
         setSelectedPipelineId("");
@@ -153,6 +181,14 @@ export default function PipelinesPage() {
       cancelled = true;
     };
   }, [loadPipelines, seedDefaultPipeline]);
+
+  // Follow the app switcher after the first load too.
+  useEffect(() => {
+    if (appPipelineId && pipelines.some((p) => p.id === appPipelineId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedPipelineId(appPipelineId);
+    }
+  }, [appPipelineId, pipelines]);
 
   // Load stages + deals whenever selected pipeline changes.
   // Clearing on no-selection is a legitimate sync with URL/prop
@@ -210,11 +246,11 @@ export default function PipelinesPage() {
         .update({ stage_id: newStageId })
         .eq("id", dealId);
       if (error) {
-        toast.error("Failed to move deal");
+        toast.error(t("toastFailedMoveDeal"));
         refreshDeals();
       }
     },
-    [supabase, refreshDeals],
+    [supabase, refreshDeals, t],
   );
 
   const handleAddDeal = useCallback(
@@ -245,22 +281,28 @@ export default function PipelinesPage() {
       setCreating(false);
       return;
     }
+    // pipelines.account_id is NOT NULL post-017 with no DB default.
+    if (!accountId) {
+      toast.error(t("toastNotLinkedToAccount"));
+      setCreating(false);
+      return;
+    }
 
     const { data: pipeline, error } = await supabase
       .from("pipelines")
-      .insert({ user_id: user.id, name })
+      .insert({ user_id: user.id, account_id: accountId, name })
       .select()
       .single();
 
     if (error || !pipeline) {
-      toast.error("Failed to create pipeline");
+      toast.error(t("toastFailedCreatePipeline"));
       setCreating(false);
       return;
     }
 
     const stagesPayload = SPEC_DEFAULT_STAGES.map((s) => ({
       pipeline_id: pipeline.id,
-      name: s.name,
+      name: t(`defaultStages.${s.nameKey}`),
       color: s.color,
       position: s.position,
     }));
@@ -271,7 +313,7 @@ export default function PipelinesPage() {
     setSelectedPipelineId(pipeline.id);
     await refreshPipelines();
     setCreating(false);
-    toast.success("Pipeline created");
+    toast.success(t("toastPipelineCreated"));
   }
 
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
@@ -280,12 +322,12 @@ export default function PipelinesPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div className="h-8 w-48 animate-pulse rounded bg-slate-800" />
-          <div className="h-9 w-28 animate-pulse rounded-lg bg-slate-800" />
+          <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+          <div className="h-9 w-28 animate-pulse rounded-lg bg-muted" />
         </div>
         <div className="flex gap-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="h-96 w-72 animate-pulse rounded-xl bg-slate-800/50" />
+            <div key={i} className="h-96 w-72 animate-pulse rounded-xl bg-muted/50" />
           ))}
         </div>
       </div>
@@ -300,21 +342,21 @@ export default function PipelinesPage() {
           {/* Pipeline selector dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800 transition-colors data-[popup-open]:bg-slate-800"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors data-[popup-open]:bg-muted"
             >
               <GitBranch className="h-4 w-4 text-primary" />
               <span className="font-semibold">
-                {selectedPipeline?.name ?? "Select Pipeline"}
+                {selectedPipeline?.name ?? t("selectPipeline")}
               </span>
-              <ChevronDown className="h-4 w-4 text-slate-400" />
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
-              className="w-64 border-slate-700 bg-slate-900 text-slate-200"
+              className="w-64 border-border bg-popover text-popover-foreground"
             >
               {pipelines.length === 0 && (
-                <DropdownMenuItem disabled className="text-slate-500">
-                  No pipelines yet
+                <DropdownMenuItem disabled className="text-muted-foreground">
+                  {t("noPipelinesYet")}
                 </DropdownMenuItem>
               )}
               {pipelines.map((p) => (
@@ -324,21 +366,21 @@ export default function PipelinesPage() {
                   className={
                     p.id === selectedPipelineId
                       ? "text-primary"
-                      : "text-slate-300"
+                      : "text-popover-foreground"
                   }
                 >
                   <GitBranch className="mr-2 h-3.5 w-3.5" />
                   {p.name}
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuSeparator className="bg-slate-700" />
+              <DropdownMenuSeparator className="bg-border" />
               {selectedPipeline && (
                 <DropdownMenuItem
                   onClick={() => setSettingsOpen(true)}
-                  className="text-slate-300"
+                  className="text-popover-foreground"
                 >
                   <Settings className="mr-2 h-3.5 w-3.5" />
-                  Manage Pipelines
+                  {t("managePipelines")}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -346,42 +388,48 @@ export default function PipelinesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
+          <GatedButton
             variant="outline"
+            canAct={canEditSettings}
+            gateReason={tGate("reasons.createPipelines")}
             onClick={() => setNewPipelineOpen(true)}
-            className="border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+            className="border-border bg-card text-foreground hover:bg-muted"
           >
             <Plus className="mr-1 h-4 w-4" />
-            Add Pipeline
-          </Button>
-          <Button
-            onClick={() => handleAddDeal()}
+            {t("addPipeline")}
+          </GatedButton>
+          <GatedButton
+            canAct={canCreateDeals}
+            gateReason={tGate("reasons.createDeals")}
             disabled={!selectedPipelineId || stages.length === 0}
+            onClick={() => handleAddDeal()}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="mr-1 h-4 w-4" />
-            Add Deal
-          </Button>
+            {t("addDeal")}
+          </GatedButton>
         </div>
       </div>
 
       {/* Board */}
       {pipelines.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700 py-20">
-          <GitBranch className="h-12 w-12 text-slate-600" />
-          <h3 className="mt-4 text-lg font-medium text-white">
-            No pipelines yet
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-20">
+          <GitBranch className="h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-4 text-lg font-medium text-foreground">
+            {t("noPipelinesYet")}
           </h3>
-          <p className="mt-2 text-sm text-slate-400">
-            Create a pipeline to start tracking deals
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t("createToStartTracking")}
           </p>
-          <Button
+          <GatedButton
+            canAct={canEditSettings}
+            gateReason={tGate("reasons.createPipelines")}
             onClick={() => setNewPipelineOpen(true)}
             className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="mr-1 h-4 w-4" />
-            Create Pipeline
-          </Button>
+            {t("createPipeline")}
+          </GatedButton>
         </div>
       ) : (
         <>
@@ -398,39 +446,39 @@ export default function PipelinesPage() {
 
       {/* New Pipeline Dialog */}
       <Dialog open={newPipelineOpen} onOpenChange={setNewPipelineOpen}>
-        <DialogContent className="sm:max-w-sm bg-slate-900 border-slate-700">
+        <DialogContent className="sm:max-w-sm bg-popover border-border">
           <DialogHeader>
-            <DialogTitle className="text-white">New Pipeline</DialogTitle>
+            <DialogTitle className="text-popover-foreground">{t("newPipeline")}</DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <Label className="text-slate-300">Pipeline Name</Label>
+            <Label className="text-muted-foreground">{t("pipelineName")}</Label>
             <Input
               value={newPipelineName}
               onChange={(e) => setNewPipelineName(e.target.value)}
-              placeholder="e.g., Enterprise Sales"
-              className="mt-2 bg-slate-800 border-slate-700 text-white"
+              placeholder={t("pipelineNamePlaceholder")}
+              className="mt-2 bg-muted border-border text-foreground"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleCreatePipeline();
               }}
             />
-            <p className="mt-2 text-xs text-slate-400">
-              Default stages (New Lead → Won) will be created automatically.
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t("defaultStagesDesc")}
             </p>
           </div>
-          <DialogFooter className="bg-slate-900/50 border-slate-700">
+          <DialogFooter className="bg-popover/50 border-border">
             <Button
               variant="outline"
               onClick={() => setNewPipelineOpen(false)}
-              className="border-slate-700 text-slate-300 hover:bg-slate-800"
+              className="border-border text-muted-foreground hover:bg-muted"
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleCreatePipeline}
               disabled={creating || !newPipelineName.trim()}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {creating ? "Creating..." : "Create Pipeline"}
+              {creating ? t("creating") : t("createPipelineBtn")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { validateFlowForActivation } from '@/lib/flows/validate'
+import { getT } from '@/lib/i18n/translate'
+
+const t = getT('Api')
 
 /**
  * POST /api/flows/[id]/activate
@@ -23,12 +27,22 @@ export async function POST(
 ) {
   const { id } = await context.params
 
+  // Changing status (activate / draft / archive) is a write — the RLS
+  // flows_update policy requires `agent`, but the service-role client
+  // below bypasses RLS, so enforce the role here (a viewer passes the
+  // membership-only ownership check).
+  try {
+    await requireRole('agent')
+  } catch (err) {
+    return toErrorResponse(err)
+  }
+
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: t('common.unauthorized') }, { status: 401 })
   }
 
   const body = (await request.json().catch(() => null)) as
@@ -37,7 +51,7 @@ export async function POST(
   const status = body?.status
   if (!status || !['draft', 'active', 'archived'].includes(status)) {
     return NextResponse.json(
-      { error: "status must be one of 'draft' | 'active' | 'archived'" },
+      { error: t('flows.statusInvalid') },
       { status: 400 },
     )
   }
@@ -49,7 +63,7 @@ export async function POST(
     .eq('id', id)
     .maybeSingle()
   if (!existing) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ error: t('common.notFound') }, { status: 404 })
   }
 
   const admin = supabaseAdmin()
@@ -68,7 +82,7 @@ export async function POST(
         .eq('flow_id', id),
     ])
     if (!flow) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+      return NextResponse.json({ error: t('common.notFound') }, { status: 404 })
     }
     const issues = validateFlowForActivation(
       flow as {
@@ -87,7 +101,7 @@ export async function POST(
     if (blockers.length > 0) {
       return NextResponse.json(
         {
-          error: 'Cannot activate flow — fix the issues below first.',
+          error: t('flows.cannotActivate'),
           issues,
         },
         { status: 422 },
@@ -104,5 +118,21 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  if (status !== 'active') {
+    const { error: runsErr } = await admin
+      .from('flow_runs')
+      .update({
+        status: 'cancelled',
+        ended_at: new Date().toISOString(),
+        end_reason: `flow_${status}`,
+      })
+      .eq('flow_id', id)
+      .eq('status', 'active')
+    if (runsErr) {
+      console.error('[flows] cancel active runs failed:', runsErr.message)
+    }
+  }
+
   return NextResponse.json({ flow: updated })
 }
