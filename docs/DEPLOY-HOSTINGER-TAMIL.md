@@ -90,6 +90,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # →
    | `NEXT_PUBLIC_APP_NAME` | `Nixie WA-CRM` (venumna maathalaam) |
    | `AUTOMATION_CRON_SECRET` | step 3 secret |
    | `ALLOWED_INVITE_HOSTS` | `crm.shinysoftwares.in` |
+   | `SITE_GATE_USER` | gate username (e.g. `owner`) |
+   | `SITE_GATE_PASSWORD` | 32+ char random password (`node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`) |
 
 5. **Domain** connect panni **SSL** on pannunga (AutoSSL 1–2 nimisham edukkum). WhatsApp webhook-ku HTTPS kandippa venum.
 6. Deploy mudinjadhum `https://crm.shinysoftwares.in/login` open panni step 2.6 login-la sign in.
@@ -144,6 +146,7 @@ hPanel → **Advanced → Cron Jobs** (illa free <https://cron-job.org> — cust
 
 Indha fork-la already on:
 - **Public signup closed** (`NEXT_PUBLIC_SIGNUP_MODE=closed` + Supabase signup OFF).
+- **Site gate** (`SITE_GATE_USER` + `SITE_GATE_PASSWORD`): login page, JS bundle, API ellaathukkum munnaadi browser Basic Auth password kekkum. Oru IP-la 10 wrong try = 15 nimisham lock (429). Meta webhook, cron, `/api/v1` mattum gate illaama reach aagum (avangaluku own auth irukku).
 - **Google indexing block**: `robots.txt` Disallow all, ella responses-ilum `X-Robots-Tag: noindex, nofollow, noarchive`, pages-la `noindex` meta.
 - **CSP enforced**, HSTS, `X-Frame-Options: DENY`, COOP, `X-Powered-By` hidden.
 - Row Level Security ella tables-ilum; WhatsApp token AES-256-GCM encrypted; webhook HMAC verify.
@@ -153,10 +156,17 @@ Deploy appuram check:
 ```bash
 curl -sI https://crm.shinysoftwares.in/login | grep -iE "x-robots|content-security|strict-transport"
 curl -s https://crm.shinysoftwares.in/robots.txt
+# Gate check — rendum 401 varanum:
+curl -s -o /dev/null -w "%{http_code}
+" https://crm.shinysoftwares.in/login
+curl -s -o /dev/null -w "%{http_code}
+" https://crm.shinysoftwares.in/_next/static/chunks/main.js
 ```
 
 Unga pakkam pannavendiyadhu:
-- Supabase **Authentication → Rate limits** default-ae vechukonga; owner account-ku strong password.
+- Supabase **Authentication → Sign In / Providers → Email** → "Allow new users to sign up" **OFF**.
+- Supabase **Authentication → Rate limits** default-ae vechukonga (illa innum korainga); owner account-ku 16+ char strong password.
+- Supabase **Authentication → URL Configuration** → Site URL + Redirect URLs-la `https://crm.shinysoftwares.in` mattum.
 - Team member vela vittaa **Settings → Team members**-la remove + Supabase Users-la delete.
 - Pazhaya API keys revoke pannunga.
 - Domain munnaadi Google-la index aagirundha: Google Search Console → **Removals** → URL prefix remove request.

@@ -1,8 +1,20 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSignupMode, isSignupAllowed } from '@/lib/auth/signup-mode'
+import { checkSiteGate } from '@/lib/auth/site-gate'
+
+// Static files skip the Supabase session lookup, but still pass the site
+// gate so the JS bundle (Supabase URL + anon key) isn't public.
+const STATIC_ASSET = /^\/_next\/|^\/favicon\.ico$|\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|css|map|woff2?|wasm)$/
 
 export async function middleware(request: NextRequest) {
+  // Site gate (SITE_GATE_USER / SITE_GATE_PASSWORD) — Basic Auth wall in
+  // front of everything, including /login. No-op when unset.
+  const blocked = await checkSiteGate(request, request.nextUrl.pathname)
+  if (blocked) return blocked
+
+  if (STATIC_ASSET.test(request.nextUrl.pathname)) return NextResponse.next()
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -106,7 +118,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  // Every path, static assets included, so the site gate covers them.
+  matcher: ['/', '/(.*)'],
 }

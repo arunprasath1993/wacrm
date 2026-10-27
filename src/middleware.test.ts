@@ -167,3 +167,41 @@ describe("middleware — sign-up gate", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 });
+
+describe("middleware — site gate", () => {
+  beforeEach(() => {
+    process.env.SITE_GATE_USER = "owner";
+    process.env.SITE_GATE_PASSWORD = "gate-secret";
+  });
+  afterEach(() => {
+    delete process.env.SITE_GATE_USER;
+    delete process.env.SITE_GATE_PASSWORD;
+  });
+
+  const basic = `Basic ${Buffer.from("owner:gate-secret").toString("base64")}`;
+
+  it("blocks /login before the Supabase check without credentials", async () => {
+    const res = await middleware(new NextRequest("https://crm.test/login"));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate")).toMatch(/^Basic /);
+  });
+
+  it("blocks static bundles without credentials", async () => {
+    const res = await middleware(new NextRequest("https://crm.test/_next/static/chunks/app.js"));
+    expect(res.status).toBe(401);
+  });
+
+  it("falls through to the session check once the gate passes", async () => {
+    mockUser = null;
+    const res = await middleware(
+      new NextRequest("https://crm.test/dashboard", { headers: { authorization: basic } }),
+    );
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
+  });
+
+  it("leaves the Meta webhook reachable", async () => {
+    const res = await middleware(new NextRequest("https://crm.test/api/whatsapp/webhook"));
+    expect(res.status).not.toBe(401);
+  });
+});
