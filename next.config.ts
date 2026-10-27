@@ -131,6 +131,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   experimental: {
     turbopackPluginRuntimeStrategy: "workerThreads",
+    // Shared build hosts (Hostinger) report the machine's full core count
+    // (64) while capping threads per container, so `next build` spawning
+    // 63 page-data workers aborts with "OS can't spawn worker thread".
+    // Cap the worker pool; override with NEXT_BUILD_CPUS on bigger hosts.
+    cpus: Number(process.env.NEXT_BUILD_CPUS) || 4,
   },
   // Stop `next dev` from overwriting the repo's hand-written AGENTS.md.
   agentRules: false,
