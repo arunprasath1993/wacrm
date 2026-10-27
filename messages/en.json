@@ -1602,7 +1602,30 @@
       "fixIssues": "Fix the issues below before activating",
       "save": "Save",
       "descriptionPlaceholder": "Add a short description (internal — customers don't see this)",
-      "descriptionLabel": "Flow description"
+      "descriptionLabel": "Flow description",
+      "json": "JSON",
+      "jsonTitle": "Edit flow as JSON",
+      "jsonDesc": "Copy this JSON to back up or share the flow, or paste a flow JSON here and hit Apply. Positions are optional — the canvas lays nodes out automatically. Nothing is saved until you click Save.",
+      "jsonCopy": "Copy",
+      "jsonCopied": "JSON copied to clipboard",
+      "jsonCopyFailed": "Couldn't copy — select the text and copy it manually",
+      "jsonReset": "Reset to current",
+      "jsonApply": "Apply",
+      "jsonApplied": "Flow loaded from JSON ({count, plural, =1 {1 node} other {# nodes}}) — click Save to keep it",
+      "jsonActiveWarning": "This flow is active. Applying JSON with errors will block Save until they're fixed."
+    },
+    "jsonIo": {
+      "invalidJson": "Not valid JSON: {detail}",
+      "notObject": "The JSON must be an object like '{' \"nodes\": [...] '}'.",
+      "unsupportedVersion": "Unsupported flow JSON version: {version}",
+      "nodesMissing": "Missing a \"nodes\" array.",
+      "nodeNotObject": "Node #{index} must be an object.",
+      "nodeKeyMissing": "Node #{index} needs a non-empty \"node_key\".",
+      "nodeKeyDuplicate": "Duplicate node_key \"{key}\" — every node_key must be unique.",
+      "nodeTypeUnknown": "Node \"{key}\" has unknown node_type \"{type}\". Allowed: {allowed}",
+      "configNotObject": "Node \"{key}\": \"config\" must be an object.",
+      "triggerTypeUnknown": "Unknown trigger_type \"{type}\". Allowed: {allowed}",
+      "triggerConfigNotObject": "\"trigger_config\" must be an object."
     }
   },
   "Settings": {

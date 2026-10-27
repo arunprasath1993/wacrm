@@ -1602,7 +1602,30 @@
       "fixIssues": "Corrige los problemas de abajo antes de activar",
       "save": "Guardar",
       "descriptionPlaceholder": "Agrega una breve descripción (interna; los clientes no la ven)",
-      "descriptionLabel": "Descripción del flujo"
+      "descriptionLabel": "Descripción del flujo",
+      "json": "JSON",
+      "jsonTitle": "Editar flujo como JSON",
+      "jsonDesc": "Copia este JSON para respaldar o compartir el flujo, o pega aquí un JSON de flujo y pulsa Aplicar. Las posiciones son opcionales: el lienzo coloca los nodos automáticamente. Nada se guarda hasta que pulses Guardar.",
+      "jsonCopy": "Copiar",
+      "jsonCopied": "JSON copiado al portapapeles",
+      "jsonCopyFailed": "No se pudo copiar: selecciona el texto y cópialo manualmente",
+      "jsonReset": "Restablecer al actual",
+      "jsonApply": "Aplicar",
+      "jsonApplied": "Flujo cargado desde JSON ({count, plural, =1 {1 nodo} other {# nodos}}); pulsa Guardar para conservarlo",
+      "jsonActiveWarning": "Este flujo está activo. Si aplicas un JSON con errores, no podrás guardar hasta corregirlos."
+    },
+    "jsonIo": {
+      "invalidJson": "JSON no válido: {detail}",
+      "notObject": "El JSON debe ser un objeto como '{' \"nodes\": [...] '}'.",
+      "unsupportedVersion": "Versión de JSON de flujo no compatible: {version}",
+      "nodesMissing": "Falta el arreglo \"nodes\".",
+      "nodeNotObject": "El nodo #{index} debe ser un objeto.",
+      "nodeKeyMissing": "El nodo #{index} necesita un \"node_key\" no vacío.",
+      "nodeKeyDuplicate": "node_key duplicado \"{key}\": cada node_key debe ser único.",
+      "nodeTypeUnknown": "El nodo \"{key}\" tiene un node_type desconocido \"{type}\". Permitidos: {allowed}",
+      "configNotObject": "Nodo \"{key}\": \"config\" debe ser un objeto.",
+      "triggerTypeUnknown": "trigger_type desconocido \"{type}\". Permitidos: {allowed}",
+      "triggerConfigNotObject": "\"trigger_config\" debe ser un objeto."
     }
   },
   "Settings": {

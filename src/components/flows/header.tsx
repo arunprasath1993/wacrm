@@ -22,10 +22,12 @@
  * /flows/[id]/runs) — those don't belong in the hook.
  */
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
+  Braces,
   CircleDot,
   History,
   Loader2,
@@ -42,10 +44,12 @@ import {
   useFlowEditor,
   type BuilderState,
 } from "./flow-editor-state";
+import { FlowJsonDialog } from "./json-dialog";
 
 export function EditorHeader() {
   const router = useRouter();
   const t = useTranslations("Flows.header");
+  const [jsonOpen, setJsonOpen] = useState(false);
   const {
     flow,
     state,
@@ -107,6 +111,10 @@ export function EditorHeader() {
             <span className="ml-0.5 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
               {flow.execution_count}
             </span>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setJsonOpen(true)}>
+            <Braces className="h-3.5 w-3.5" />
+            {t("json")}
           </Button>
           <Button
             variant="ghost"
@@ -170,6 +178,8 @@ export function EditorHeader() {
         aria-label={t("descriptionLabel")}
         className="w-full max-w-[78ch] rounded-md border border-transparent bg-transparent px-2 py-1 text-[13px] text-muted-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/50 focus:border-primary focus:bg-transparent focus:text-foreground"
       />
+
+      <FlowJsonDialog open={jsonOpen} onOpenChange={setJsonOpen} />
     </div>
   );
 }

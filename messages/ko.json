@@ -1602,7 +1602,30 @@
       "fixIssues": "활성화하기 전에 아래 문제를 해결하세요",
       "save": "저장",
       "descriptionPlaceholder": "짧은 설명을 추가하세요 (내부용 — 고객에게는 보이지 않습니다)",
-      "descriptionLabel": "플로우 설명"
+      "descriptionLabel": "플로우 설명",
+      "json": "JSON",
+      "jsonTitle": "JSON으로 플로우 편집",
+      "jsonDesc": "이 JSON을 복사해 플로우를 백업하거나 공유하고, 또는 플로우 JSON을 붙여넣고 적용을 누르세요. 위치는 선택 사항이며 캔버스가 노드를 자동으로 배치합니다. 저장을 누르기 전까지는 저장되지 않습니다.",
+      "jsonCopy": "복사",
+      "jsonCopied": "JSON을 클립보드에 복사했습니다",
+      "jsonCopyFailed": "복사하지 못했습니다 — 텍스트를 선택해 직접 복사하세요",
+      "jsonReset": "현재 상태로 되돌리기",
+      "jsonApply": "적용",
+      "jsonApplied": "JSON에서 플로우를 불러왔습니다 ({count, plural, other {노드 #개}}) — 유지하려면 저장을 누르세요",
+      "jsonActiveWarning": "이 플로우는 활성 상태입니다. 오류가 있는 JSON을 적용하면 수정할 때까지 저장할 수 없습니다."
+    },
+    "jsonIo": {
+      "invalidJson": "올바른 JSON이 아닙니다: {detail}",
+      "notObject": "JSON은 '{' \"nodes\": [...] '}' 형태의 객체여야 합니다.",
+      "unsupportedVersion": "지원하지 않는 플로우 JSON 버전: {version}",
+      "nodesMissing": "\"nodes\" 배열이 없습니다.",
+      "nodeNotObject": "노드 #{index}은(는) 객체여야 합니다.",
+      "nodeKeyMissing": "노드 #{index}에 비어 있지 않은 \"node_key\"가 필요합니다.",
+      "nodeKeyDuplicate": "중복된 node_key \"{key}\" — 모든 node_key는 고유해야 합니다.",
+      "nodeTypeUnknown": "노드 \"{key}\"의 node_type \"{type}\"을(를) 알 수 없습니다. 허용: {allowed}",
+      "configNotObject": "노드 \"{key}\": \"config\"는 객체여야 합니다.",
+      "triggerTypeUnknown": "알 수 없는 trigger_type \"{type}\". 허용: {allowed}",
+      "triggerConfigNotObject": "\"trigger_config\"는 객체여야 합니다."
     }
   },
   "Settings": {

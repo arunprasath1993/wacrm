@@ -1602,7 +1602,30 @@
       "fixIssues": "Corrija os problemas abaixo antes de ativar",
       "save": "Salvar",
       "descriptionPlaceholder": "Adicione uma breve descrição (interna — os clientes não a veem)",
-      "descriptionLabel": "Descrição do fluxo"
+      "descriptionLabel": "Descrição do fluxo",
+      "json": "JSON",
+      "jsonTitle": "Editar fluxo como JSON",
+      "jsonDesc": "Copie este JSON para fazer backup ou compartilhar o fluxo, ou cole aqui um JSON de fluxo e clique em Aplicar. As posições são opcionais — o canvas organiza os nós automaticamente. Nada é salvo até você clicar em Salvar.",
+      "jsonCopy": "Copiar",
+      "jsonCopied": "JSON copiado para a área de transferência",
+      "jsonCopyFailed": "Não foi possível copiar — selecione o texto e copie manualmente",
+      "jsonReset": "Voltar ao atual",
+      "jsonApply": "Aplicar",
+      "jsonApplied": "Fluxo carregado do JSON ({count, plural, =1 {1 nó} other {# nós}}) — clique em Salvar para mantê-lo",
+      "jsonActiveWarning": "Este fluxo está ativo. Aplicar um JSON com erros bloqueará o Salvar até que sejam corrigidos."
+    },
+    "jsonIo": {
+      "invalidJson": "JSON inválido: {detail}",
+      "notObject": "O JSON deve ser um objeto como '{' \"nodes\": [...] '}'.",
+      "unsupportedVersion": "Versão de JSON de fluxo não suportada: {version}",
+      "nodesMissing": "Falta o array \"nodes\".",
+      "nodeNotObject": "O nó #{index} deve ser um objeto.",
+      "nodeKeyMissing": "O nó #{index} precisa de um \"node_key\" não vazio.",
+      "nodeKeyDuplicate": "node_key duplicado \"{key}\" — cada node_key deve ser único.",
+      "nodeTypeUnknown": "O nó \"{key}\" tem node_type desconhecido \"{type}\". Permitidos: {allowed}",
+      "configNotObject": "Nó \"{key}\": \"config\" deve ser um objeto.",
+      "triggerTypeUnknown": "trigger_type desconhecido \"{type}\". Permitidos: {allowed}",
+      "triggerConfigNotObject": "\"trigger_config\" deve ser um objeto."
     }
   },
   "Settings": {
