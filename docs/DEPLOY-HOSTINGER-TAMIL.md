@@ -6,7 +6,7 @@ ellam connect aagi CRM live aagum. Mothama ~45 nimisham.
 > **Thevaiyaanavai:** GitHub account, Supabase account (free plan podhum),
 > Hostinger **Business Web Hosting** illa **Cloud** plan (Node.js web
 > apps indha plans-la mattum dhaan), Meta Business account + WhatsApp
-> Cloud API app, oru domain/subdomain (e.g. `crm.shinysoftwares.in`).
+> Cloud API app, oru domain/subdomain (e.g. `mybot.nixie.in`).
 
 ---
 
@@ -15,7 +15,7 @@ ellam connect aagi CRM live aagum. Mothama ~45 nimisham.
 ```bash
 cd wacrm
 git remote rename origin upstream          # original ArnasDon/wacrm — future updates-ku
-git remote add origin https://github.com/<your-username>/nixie-wa-crm.git
+git remote add origin https://github.com/arunprasath1993/nixieChatBot.git
 git push -u origin main
 ```
 
@@ -45,8 +45,8 @@ git push -u origin main
 4. **Authentication → Sign In / Providers → Email**: **"Allow new users to sign up" OFF** pannunga.
    (Public signup close — unga team mattum dhaan login panna mudiyum.)
 5. **Authentication → URL Configuration**:
-   - Site URL: `https://crm.shinysoftwares.in`
-   - Redirect URLs: `https://crm.shinysoftwares.in/auth/callback`
+   - Site URL: `https://mybot.nixie.in`
+   - Redirect URLs: `https://mybot.nixie.in/auth/callback`
 6. **First owner login create**: **Authentication → Users → Add user → Create new user** →
    unga email + strong password → **Auto Confirm User** tick → Create.
    Indha first user automatic-aa **Owner** aagiduvaanga.
@@ -85,16 +85,16 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # →
    | `ENCRYPTION_KEY` | step 3 hex |
    | `META_APP_SECRET` | Meta App → Settings → Basic → App secret |
    | `META_APP_ID` | Meta App ID (image-header templates-ku) |
-   | `NEXT_PUBLIC_SITE_URL` | `https://crm.shinysoftwares.in` (trailing `/` illama) |
+   | `NEXT_PUBLIC_SITE_URL` | `https://mybot.nixie.in` (trailing `/` illama) |
    | `NEXT_PUBLIC_SIGNUP_MODE` | `closed` |
    | `NEXT_PUBLIC_APP_NAME` | `Nixie WA-CRM` (venumna maathalaam) |
    | `AUTOMATION_CRON_SECRET` | step 3 secret |
-   | `ALLOWED_INVITE_HOSTS` | `crm.shinysoftwares.in` |
+   | `ALLOWED_INVITE_HOSTS` | `mybot.nixie.in` |
    | `SITE_GATE_USER` | gate username (e.g. `owner`) |
    | `SITE_GATE_PASSWORD` | 32+ char random password (`node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`) |
 
 5. **Domain** connect panni **SSL** on pannunga (AutoSSL 1–2 nimisham edukkum). WhatsApp webhook-ku HTTPS kandippa venum.
-6. Deploy mudinjadhum `https://crm.shinysoftwares.in/login` open panni step 2.6 login-la sign in.
+6. Deploy mudinjadhum `https://mybot.nixie.in/login` open panni step 2.6 login-la sign in.
    **Settings → Your profile**-la unga name update pannunga.
 
 > Build fail aana (memory): hPanel-la app restart panni redeploy; Hostinger
@@ -107,7 +107,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"   # →
    permissions: `whatsapp_business_messaging`, `whatsapp_business_management` → **Never expire**.
 3. CRM-la **Settings → WhatsApp**: Phone Number ID, WABA ID, token paste; oru **verify token** (unga sondha random word) type; production number-na **2-step PIN**; **Save Configuration**.
 4. Meta → **WhatsApp → Configuration → Webhook**:
-   - Callback URL: `https://crm.shinysoftwares.in/api/whatsapp/webhook`
+   - Callback URL: `https://mybot.nixie.in/api/whatsapp/webhook`
    - Verify token: step 3-la type panna adhe word
    - **Verify and save** → **Webhook fields → `messages` Subscribe**.
 5. CRM-la **Verify with Meta** click — ella checks green aaganum. Unga phone-la irundhu test message anuppi Inbox-la varudhaa paarunga.
@@ -123,7 +123,7 @@ ellam andha app-ku mattum filter aagum.
 Settings → API keys → `contacts:write` scope-oda key create → unga app **server**-la irundhu:
 
 ```bash
-curl -X POST https://crm.shinysoftwares.in/api/v1/contacts \
+curl -X POST https://mybot.nixie.in/api/v1/contacts \
   -H "Authorization: Bearer <API_KEY>" -H "Content-Type: application/json" \
   -d '{"phone":"+919876543210","name":"Customer","app":"nixie-crm"}'
 ```
@@ -136,8 +136,8 @@ Automations-la **"Tag added" → Nixie CRM tag** trigger vechaa welcome template
 hPanel → **Advanced → Cron Jobs** (illa free <https://cron-job.org> — custom header support irukku), every minute:
 
 ```
-* * * * * curl -s -H "x-cron-secret: <AUTOMATION_CRON_SECRET>" https://crm.shinysoftwares.in/api/automations/cron > /dev/null
-* * * * * curl -s -H "x-cron-secret: <AUTOMATION_CRON_SECRET>" https://crm.shinysoftwares.in/api/flows/cron > /dev/null
+* * * * * curl -s -H "x-cron-secret: <AUTOMATION_CRON_SECRET>" https://mybot.nixie.in/api/automations/cron > /dev/null
+* * * * * curl -s -H "x-cron-secret: <AUTOMATION_CRON_SECRET>" https://mybot.nixie.in/api/flows/cron > /dev/null
 ```
 
 (hPanel cron app env vars-a read pannaadhu — secret-a literal-aa paste pannanum.)
@@ -154,19 +154,19 @@ Indha fork-la already on:
 Deploy appuram check:
 
 ```bash
-curl -sI https://crm.shinysoftwares.in/login | grep -iE "x-robots|content-security|strict-transport"
-curl -s https://crm.shinysoftwares.in/robots.txt
+curl -sI https://mybot.nixie.in/login | grep -iE "x-robots|content-security|strict-transport"
+curl -s https://mybot.nixie.in/robots.txt
 # Gate check — rendum 401 varanum:
 curl -s -o /dev/null -w "%{http_code}
-" https://crm.shinysoftwares.in/login
+" https://mybot.nixie.in/login
 curl -s -o /dev/null -w "%{http_code}
-" https://crm.shinysoftwares.in/_next/static/chunks/main.js
+" https://mybot.nixie.in/_next/static/chunks/main.js
 ```
 
 Unga pakkam pannavendiyadhu:
 - Supabase **Authentication → Sign In / Providers → Email** → "Allow new users to sign up" **OFF**.
 - Supabase **Authentication → Rate limits** default-ae vechukonga (illa innum korainga); owner account-ku 16+ char strong password.
-- Supabase **Authentication → URL Configuration** → Site URL + Redirect URLs-la `https://crm.shinysoftwares.in` mattum.
+- Supabase **Authentication → URL Configuration** → Site URL + Redirect URLs-la `https://mybot.nixie.in` mattum.
 - Team member vela vittaa **Settings → Team members**-la remove + Supabase Users-la delete.
 - Pazhaya API keys revoke pannunga.
 - Domain munnaadi Google-la index aagirundha: Google Search Console → **Removals** → URL prefix remove request.
@@ -176,7 +176,7 @@ Unga pakkam pannavendiyadhu:
 
 ```bash
 git pull                 # illa: git fetch upstream && git merge upstream/main
-git push origin main     # Hostinger auto rebuild pannum
+git push nixie main      # Hostinger auto rebuild pannum
 ```
 
 Pudhu migration files vandha → `npx supabase db push` (illa SQL Editor-la pudhu files mattum run).
