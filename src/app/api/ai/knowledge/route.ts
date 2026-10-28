@@ -20,11 +20,20 @@ const t = getT('Api')
 export async function GET() {
   try {
     const { supabase, accountId } = await getCurrentAccount()
-    const { data, error } = await supabase
-      .from('ai_knowledge_documents')
-      .select('id, title, updated_at')
-      .eq('account_id', accountId)
-      .order('updated_at', { ascending: false })
+    const list = (columns: string) =>
+      supabase
+        .from('ai_knowledge_documents')
+        .select(columns)
+        .eq('account_id', accountId)
+        .order('updated_at', { ascending: false })
+    let { data, error } = await list(
+      'id, title, updated_at, source_type, file_name, file_size',
+    )
+    // 42703 = undefined column: migration 062 isn't applied yet. Keep
+    // the pasted-text KB working rather than failing the whole card.
+    if (error?.code === '42703') {
+      ;({ data, error } = await list('id, title, updated_at'))
+    }
     if (error) {
       console.error('[ai/knowledge GET] error:', error)
       return NextResponse.json(
@@ -85,6 +94,7 @@ export async function POST(request: Request) {
         { embeddingsApiKey },
         doc.id,
         content,
+        title,
       )
     } catch (err) {
       const message = err instanceof AiError ? err.message : t('ai.knowledge.indexingFailed')

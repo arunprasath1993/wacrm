@@ -2233,7 +2233,21 @@
       "reindexTooltip": "Volver a generar los embeddings de todos los documentos (p. ej. después de agregar una clave de embeddings)",
       "editDoc": "Editar",
       "deleteDoc": "Eliminar",
-      "loading": "Cargando…"
+      "loading": "Cargando…",
+      "uploadFiles": "Subir archivos",
+      "uploadHint": "PDF o Word (.docx), hasta {max} archivos a la vez, {mb} MB cada uno. El texto se extrae automáticamente, sin costo de IA. Aún no se admiten PDF escaneados ni imágenes.",
+      "dropHere": "Suelta aquí archivos PDF o DOCX",
+      "tooManyFiles": "Puedes subir hasta {max} archivos a la vez.",
+      "fileTooBig": "Mayor de {mb} MB",
+      "legacyDoc": "Formato .doc antiguo: guárdalo como .docx y vuelve a subirlo",
+      "unsupportedType": "Solo se admiten archivos PDF y .docx",
+      "statusUploading": "Subiendo…",
+      "statusProcessing": "Extrayendo texto…",
+      "statusDone": "Agregado",
+      "uploadFailed": "Error al subir",
+      "clearUploads": "Limpiar",
+      "downloadFile": "Descargar original",
+      "migrationMissing": "Subir archivos requiere la migración 062 (062_ai_knowledge_files.sql). Ejecútala en el SQL Editor de Supabase y vuelve a intentarlo."
     },
     "quickReplies": {
       "nameRequired": "Ponle un nombre a la respuesta rápida.",
@@ -2858,7 +2872,22 @@
         "saveDocFailed": "Error al guardar el documento",
         "savedIndexFailed": "Guardado, pero la indexación semántica falló ({message}). La búsqueda por palabras clave sigue funcionando; usa Reindexar para reintentar.",
         "savedNotIndexed": "Guardado, pero la indexación falló ({message}). El documento aún no aparece en las búsquedas; usa Reindexar para reintentar.",
-        "savedKeywordOnly": "Guardado solo con búsqueda por palabras clave: no se pudo descifrar tu clave de embeddings (revisa ENCRYPTION_KEY y vuelve a ingresar la clave)."
+        "savedKeywordOnly": "Guardado solo con búsqueda por palabras clave: no se pudo descifrar tu clave de embeddings (revisa ENCRYPTION_KEY y vuelve a ingresar la clave).",
+        "fileBodyRequired": "file_path y file_name son obligatorios",
+        "forbiddenPath": "Ese archivo no pertenece a tu cuenta",
+        "alreadyImported": "Este archivo ya fue importado",
+        "fileNotFound": "No se encontró el archivo subido; intenta subirlo de nuevo",
+        "fileTooLarge": "El archivo supera los {mb} MB",
+        "untitledFile": "Documento sin título",
+        "migrationMissing": "Subir archivos requiere la migración 062 (062_ai_knowledge_files.sql). Ejecútala en el SQL Editor de Supabase y vuelve a intentarlo.",
+        "noFile": "Este documento no tiene archivo original",
+        "extract": {
+          "unsupported": "Solo se admiten archivos PDF y Word (.docx). Si es un .doc antiguo, guárdalo primero como .docx.",
+          "corrupt": "No se pudo leer el archivo; puede estar dañado o protegido con contraseña.",
+          "too_many_pages": "El PDF tiene más de 300 páginas; divídelo en archivos más pequeños.",
+          "no_text": "No se encontró texto; parece un PDF escaneado o imágenes. Los archivos escaneados aún no se admiten.",
+          "too_long": "El documento tiene demasiado texto (más de 300.000 caracteres); divídelo en archivos más pequeños."
+        }
       }
     },
     "automations": {

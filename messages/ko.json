@@ -2233,7 +2233,21 @@
       "reindexTooltip": "모든 문서를 다시 임베딩합니다 (예: 임베딩 키 추가 후)",
       "editDoc": "수정",
       "deleteDoc": "삭제",
-      "loading": "불러오는 중…"
+      "loading": "불러오는 중…",
+      "uploadFiles": "파일 업로드",
+      "uploadHint": "PDF 또는 Word(.docx), 한 번에 최대 {max}개, 파일당 {mb}MB. 텍스트는 자동으로 추출되며 AI 비용이 들지 않습니다. 스캔한 PDF와 이미지는 아직 지원되지 않습니다.",
+      "dropHere": "PDF 또는 DOCX 파일을 여기에 놓으세요",
+      "tooManyFiles": "한 번에 최대 {max}개 파일까지 업로드할 수 있습니다.",
+      "fileTooBig": "{mb}MB 초과",
+      "legacyDoc": "이전 .doc 형식입니다 — .docx로 저장한 뒤 다시 업로드하세요",
+      "unsupportedType": "PDF와 .docx 파일만 지원됩니다",
+      "statusUploading": "업로드 중…",
+      "statusProcessing": "텍스트 추출 중…",
+      "statusDone": "추가됨",
+      "uploadFailed": "업로드 실패",
+      "clearUploads": "지우기",
+      "downloadFile": "원본 다운로드",
+      "migrationMissing": "파일 업로드에는 데이터베이스 마이그레이션 062(062_ai_knowledge_files.sql)가 필요합니다. Supabase SQL Editor에서 실행한 뒤 다시 시도하세요."
     },
     "quickReplies": {
       "nameRequired": "빠른 답장의 이름을 입력하세요.",
@@ -2858,7 +2872,22 @@
         "saveDocFailed": "문서를 저장하지 못했습니다",
         "savedIndexFailed": "저장되었지만 의미 기반 색인에 실패했습니다({message}). 키워드 검색은 계속 작동합니다. 재색인을 사용해 다시 시도하세요.",
         "savedNotIndexed": "저장되었지만 색인에 실패했습니다({message}). 아직 문서를 검색할 수 없습니다. 재색인을 사용해 다시 시도하세요.",
-        "savedKeywordOnly": "키워드 검색만으로 저장되었습니다 — 임베딩 키를 복호화할 수 없습니다(ENCRYPTION_KEY를 확인한 후 키를 다시 입력하세요)."
+        "savedKeywordOnly": "키워드 검색만으로 저장되었습니다 — 임베딩 키를 복호화할 수 없습니다(ENCRYPTION_KEY를 확인한 후 키를 다시 입력하세요).",
+        "fileBodyRequired": "file_path와 file_name이 필요합니다",
+        "forbiddenPath": "이 파일은 계정에 속하지 않습니다",
+        "alreadyImported": "이미 가져온 파일입니다",
+        "fileNotFound": "업로드한 파일을 찾을 수 없습니다 — 다시 업로드해 주세요",
+        "fileTooLarge": "파일이 {mb}MB를 초과합니다",
+        "untitledFile": "제목 없는 문서",
+        "migrationMissing": "파일 업로드에는 데이터베이스 마이그레이션 062(062_ai_knowledge_files.sql)가 필요합니다. Supabase SQL Editor에서 실행한 뒤 다시 시도하세요.",
+        "noFile": "이 문서에는 원본 파일이 없습니다",
+        "extract": {
+          "unsupported": "PDF와 Word(.docx) 파일만 지원됩니다. 이전 .doc 파일은 먼저 .docx로 저장하세요.",
+          "corrupt": "파일을 읽을 수 없습니다 — 손상되었거나 암호로 보호되어 있을 수 있습니다.",
+          "too_many_pages": "PDF가 300페이지를 초과합니다 — 더 작은 파일로 나누세요.",
+          "no_text": "텍스트를 찾을 수 없습니다 — 스캔한 PDF나 이미지로 보입니다. 스캔 파일은 아직 지원되지 않습니다.",
+          "too_long": "문서의 텍스트가 너무 많습니다(300,000자 초과) — 더 작은 파일로 나누세요."
+        }
       }
     },
     "automations": {

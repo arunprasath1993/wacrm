@@ -2233,7 +2233,21 @@
       "reindexTooltip": "Re-embed all documents (e.g. after adding an embeddings key)",
       "editDoc": "Edit",
       "deleteDoc": "Delete",
-      "loading": "Loading…"
+      "loading": "Loading…",
+      "uploadFiles": "Upload files",
+      "uploadHint": "PDF or Word (.docx), up to {max} files at a time, {mb} MB each. Text is extracted automatically — no AI cost. Scanned PDFs and images aren't supported yet.",
+      "dropHere": "Drop PDF or DOCX files here",
+      "tooManyFiles": "You can upload up to {max} files at a time.",
+      "fileTooBig": "Larger than {mb} MB",
+      "legacyDoc": "Old .doc format — save it as .docx and upload again",
+      "unsupportedType": "Only PDF and .docx files are supported",
+      "statusUploading": "Uploading…",
+      "statusProcessing": "Extracting text…",
+      "statusDone": "Added",
+      "uploadFailed": "Upload failed",
+      "clearUploads": "Clear",
+      "downloadFile": "Download original",
+      "migrationMissing": "File uploads need database migration 062 (062_ai_knowledge_files.sql). Run it in the Supabase SQL Editor, then try again."
     },
     "quickReplies": {
       "nameRequired": "Give the quick reply a name.",
@@ -2858,7 +2872,22 @@
         "saveDocFailed": "Failed to save document",
         "savedIndexFailed": "Saved, but semantic indexing failed ({message}). Lexical search still works; use Reindex to retry.",
         "savedNotIndexed": "Saved, but indexing failed ({message}). The document is not searchable yet; use Reindex to retry.",
-        "savedKeywordOnly": "Saved with keyword search only — your embeddings key could not be decrypted (check ENCRYPTION_KEY, then re-enter the key)."
+        "savedKeywordOnly": "Saved with keyword search only — your embeddings key could not be decrypted (check ENCRYPTION_KEY, then re-enter the key).",
+        "fileBodyRequired": "file_path and file_name are required",
+        "forbiddenPath": "That file doesn't belong to your account",
+        "alreadyImported": "This file has already been imported",
+        "fileNotFound": "Uploaded file not found — try uploading again",
+        "fileTooLarge": "File is larger than {mb} MB",
+        "untitledFile": "Untitled document",
+        "migrationMissing": "File uploads need database migration 062 (062_ai_knowledge_files.sql). Run it in the Supabase SQL Editor, then try again.",
+        "noFile": "This document has no original file",
+        "extract": {
+          "unsupported": "Only PDF and Word (.docx) files are supported. For an old .doc file, save it as .docx first.",
+          "corrupt": "The file couldn't be read — it may be damaged or password-protected.",
+          "too_many_pages": "The PDF has more than 300 pages — split it into smaller files.",
+          "no_text": "No text found — this looks like a scanned PDF or images. Scanned files aren't supported yet.",
+          "too_long": "The document has too much text (over 300,000 characters) — split it into smaller files."
+        }
       }
     },
     "automations": {

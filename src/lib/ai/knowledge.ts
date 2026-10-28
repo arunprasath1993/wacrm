@@ -31,8 +31,10 @@ export async function ingestDocument(
   config: Pick<AiConfig, 'embeddingsApiKey'>,
   documentId: string,
   content: string,
+  /** Document title — becomes the chunks' breadcrumb prefix. */
+  title?: string,
 ): Promise<IngestResult> {
-  const chunks = chunkText(content)
+  const chunks = chunkText(content, { title })
 
   // Replace, don't append — re-ingest must be idempotent.
   const { error: delErr } = await db
@@ -75,7 +77,12 @@ export async function ingestDocument(
  *
  * Semantic-primary when an embeddings key is configured (embed the
  * query → cosine-nearest chunks), then topped up with lexical full-text
- * matches to fill `k`. Lexical-only when there's no key. Best-effort:
+ * matches to fill `k`. Lexical-only when there's no key.
+ *
+ * The result is capped at `budgetChars` in total (rank order, the top
+ * excerpt always kept, truncated if it alone is over), because every
+ * excerpt is paid for as prompt tokens on every draft / auto-reply.
+ * Best-effort:
  * any failure (no KB, embedding error, RPC error) degrades to fewer or
  * zero results and never throws into the draft / auto-reply path.
  */
@@ -85,6 +92,7 @@ export async function retrieveKnowledge(
   config: Pick<AiConfig, 'embeddingsApiKey'>,
   queryText: string,
   k = 5,
+  budgetChars = 3200,
 ): Promise<string[]> {
   const query = queryText.trim()
   if (!query || k <= 0) return []
@@ -143,5 +151,22 @@ export async function retrieveKnowledge(
     }
   }
 
-  return Array.from(picked.values()).slice(0, k)
+  return applyBudget(Array.from(picked.values()).slice(0, k), budgetChars)
+}
+
+function applyBudget(excerpts: string[], budgetChars: number): string[] {
+  const out: string[] = []
+  let used = 0
+  for (const excerpt of excerpts) {
+    if (out.length === 0) {
+      const first = excerpt.slice(0, budgetChars)
+      out.push(first)
+      used = first.length
+      continue
+    }
+    if (used + excerpt.length > budgetChars) break
+    out.push(excerpt)
+    used += excerpt.length
+  }
+  return out
 }

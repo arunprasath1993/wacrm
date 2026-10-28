@@ -2233,7 +2233,21 @@
       "reindexTooltip": "Gerar novamente os embeddings de todos os documentos (ex.: após adicionar uma chave de embeddings)",
       "editDoc": "Editar",
       "deleteDoc": "Excluir",
-      "loading": "Carregando…"
+      "loading": "Carregando…",
+      "uploadFiles": "Enviar arquivos",
+      "uploadHint": "PDF ou Word (.docx), até {max} arquivos por vez, {mb} MB cada. O texto é extraído automaticamente — sem custo de IA. PDFs digitalizados e imagens ainda não são suportados.",
+      "dropHere": "Solte arquivos PDF ou DOCX aqui",
+      "tooManyFiles": "Você pode enviar até {max} arquivos por vez.",
+      "fileTooBig": "Maior que {mb} MB",
+      "legacyDoc": "Formato .doc antigo — salve como .docx e envie novamente",
+      "unsupportedType": "Apenas arquivos PDF e .docx são suportados",
+      "statusUploading": "Enviando…",
+      "statusProcessing": "Extraindo texto…",
+      "statusDone": "Adicionado",
+      "uploadFailed": "Falha no envio",
+      "clearUploads": "Limpar",
+      "downloadFile": "Baixar original",
+      "migrationMissing": "O envio de arquivos precisa da migração 062 (062_ai_knowledge_files.sql). Execute-a no SQL Editor do Supabase e tente novamente."
     },
     "quickReplies": {
       "nameRequired": "Dê um nome à resposta rápida.",
@@ -2858,7 +2872,22 @@
         "saveDocFailed": "Falha ao salvar o documento",
         "savedIndexFailed": "Salvo, mas a indexação semântica falhou ({message}). A busca por palavras-chave continua funcionando; use Reindexar para tentar novamente.",
         "savedNotIndexed": "Salvo, mas a indexação falhou ({message}). O documento ainda não pode ser encontrado na busca; use Reindexar para tentar novamente.",
-        "savedKeywordOnly": "Salvo apenas com busca por palavras-chave — não foi possível descriptografar sua chave de embeddings (verifique a ENCRYPTION_KEY e informe a chave novamente)."
+        "savedKeywordOnly": "Salvo apenas com busca por palavras-chave — não foi possível descriptografar sua chave de embeddings (verifique a ENCRYPTION_KEY e informe a chave novamente).",
+        "fileBodyRequired": "file_path e file_name são obrigatórios",
+        "forbiddenPath": "Esse arquivo não pertence à sua conta",
+        "alreadyImported": "Este arquivo já foi importado",
+        "fileNotFound": "Arquivo enviado não encontrado — tente enviar novamente",
+        "fileTooLarge": "O arquivo tem mais de {mb} MB",
+        "untitledFile": "Documento sem título",
+        "migrationMissing": "O envio de arquivos precisa da migração 062 (062_ai_knowledge_files.sql). Execute-a no SQL Editor do Supabase e tente novamente.",
+        "noFile": "Este documento não tem arquivo original",
+        "extract": {
+          "unsupported": "Apenas arquivos PDF e Word (.docx) são suportados. Para um .doc antigo, salve-o como .docx primeiro.",
+          "corrupt": "Não foi possível ler o arquivo — ele pode estar danificado ou protegido por senha.",
+          "too_many_pages": "O PDF tem mais de 300 páginas — divida-o em arquivos menores.",
+          "no_text": "Nenhum texto encontrado — parece um PDF digitalizado ou imagens. Arquivos digitalizados ainda não são suportados.",
+          "too_long": "O documento tem texto demais (mais de 300.000 caracteres) — divida-o em arquivos menores."
+        }
       }
     },
     "automations": {

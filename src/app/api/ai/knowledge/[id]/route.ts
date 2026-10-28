@@ -7,6 +7,7 @@ import {
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { loadEmbeddingsKey } from '@/lib/ai/config'
 import { ingestDocument, type IngestResult } from '@/lib/ai/knowledge'
+import { KB_BUCKET } from '@/lib/ai/kb-files'
 import { AiError } from '@/lib/ai/types'
 import { getT } from '@/lib/i18n/translate'
 
@@ -71,7 +72,7 @@ export async function PATCH(request: Request, { params }: Params) {
       .update(update)
       .eq('account_id', accountId)
       .eq('id', id)
-      .select('id')
+      .select('id, title')
       .maybeSingle()
     if (error) {
       console.error('[ai/knowledge/[id] PATCH] error:', error)
@@ -86,7 +87,14 @@ export async function PATCH(request: Request, { params }: Params) {
       )
       let ingest: IngestResult
       try {
-        ingest = await ingestDocument(supabase, accountId, { embeddingsApiKey }, id, content)
+        ingest = await ingestDocument(
+          supabase,
+          accountId,
+          { embeddingsApiKey },
+          id,
+          content,
+          updated.title,
+        )
       } catch (err) {
         const message = err instanceof AiError ? err.message : t('ai.knowledge.indexingFailed')
         console.error('[ai/knowledge/[id] PATCH] ingest error:', err)
@@ -132,6 +140,14 @@ export async function DELETE(_request: Request, { params }: Params) {
   try {
     const { supabase, accountId } = await requireRole('admin')
     const { id } = await params
+    // Look up the original file first (errors ignored: pre-062 schemas
+    // have no file_path column, and pasted docs have no file).
+    const { data: fileRow } = await supabase
+      .from('ai_knowledge_documents')
+      .select('file_path')
+      .eq('account_id', accountId)
+      .eq('id', id)
+      .maybeSingle()
     const { error } = await supabase
       .from('ai_knowledge_documents')
       .delete()
@@ -140,6 +156,14 @@ export async function DELETE(_request: Request, { params }: Params) {
     if (error) {
       console.error('[ai/knowledge/[id] DELETE] error:', error)
       return NextResponse.json({ error: t('ai.knowledge.deleteDocFailed') }, { status: 500 })
+    }
+    if (fileRow?.file_path) {
+      // Best-effort: the document is gone either way; an orphaned
+      // object only costs storage.
+      const { error: rmErr } = await supabase.storage
+        .from(KB_BUCKET)
+        .remove([fileRow.file_path])
+      if (rmErr) console.error('[ai/knowledge/[id] DELETE] file cleanup failed:', rmErr)
     }
     return NextResponse.json({ success: true })
   } catch (err) {

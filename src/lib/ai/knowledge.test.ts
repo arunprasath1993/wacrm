@@ -119,6 +119,20 @@ describe('retrieveKnowledge', () => {
       'match_ai_knowledge_fts',
     ])
   })
+
+  it('stops adding excerpts once the character budget is reached', async () => {
+    const { db, state } = makeDb()
+    state.fts = ['a', 'b', 'c', 'd', 'e'].map((c) => ({ id: c, content: c.repeat(1000) }))
+    const out = await retrieveKnowledge(db, 'acct', { embeddingsApiKey: null }, 'q')
+    expect(out).toEqual(['a', 'b', 'c'].map((c) => c.repeat(1000)))
+  })
+
+  it('always returns the top excerpt, truncated to the budget', async () => {
+    const { db, state } = makeDb()
+    state.fts = [{ id: 'big', content: 'x'.repeat(5000) }]
+    const out = await retrieveKnowledge(db, 'acct', { embeddingsApiKey: null }, 'q')
+    expect(out).toEqual(['x'.repeat(3200)])
+  })
 })
 
 describe('ingestDocument', () => {
@@ -131,6 +145,12 @@ describe('ingestDocument', () => {
     expect(state.inserted).toHaveLength(1)
     expect(state.inserted![0].embedding).toBe('[0,0]') // literal from mocked embed
     expect(state.inserted![0].account_id).toBe('acct')
+  })
+
+  it('prefixes chunks with the document title', async () => {
+    const { db, state } = makeDb()
+    await ingestDocument(db, 'acct', { embeddingsApiKey: null }, 'doc-1', 'hello world', 'FAQ')
+    expect(state.inserted![0].content).toBe('FAQ:\nhello world')
   })
 
   it('stores chunks without embeddings when there is no key', async () => {
