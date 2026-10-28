@@ -61,6 +61,12 @@ describe('parseGeneration', () => {
     })
   })
 
+  it('converts Markdown formatting to WhatsApp formatting', () => {
+    expect(parseGeneration('**Step by step:**\n## Plans').text).toBe(
+      '*Step by step:*\n*Plans*',
+    )
+  })
+
   it('passes usage straight through', () => {
     const usage = { promptTokens: 10, completionTokens: 5, totalTokens: 15 }
     expect(parseGeneration('Hi', usage)).toEqual({
