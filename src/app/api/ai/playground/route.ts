@@ -7,6 +7,7 @@ import { generateReply } from '@/lib/ai/generate'
 import { buildSystemPrompt } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
 import { AiError, type ChatMessage } from '@/lib/ai/types'
+import { loadBookingContext } from '@/lib/bookings/load'
 import { getT } from '@/lib/i18n/translate'
 
 const t = getT('Api')
@@ -81,14 +82,29 @@ export async function POST(request: Request) {
       config,
       latestUserMessage(messages),
     )
+    const { types: bookingTypes, timeZone } = await loadBookingContext(supabase, accountId)
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      now: new Date(),
+      timeZone,
+      bookingTypes,
     })
 
-    const { text, handoff } = await generateReply({ config, systemPrompt, messages })
-    return NextResponse.json({ reply: text, handoff })
+    const { text, handoff, booking, bookingMalformed } = await generateReply({
+      config,
+      systemPrompt,
+      messages,
+    })
+    // A preview only: there is no customer here, so nothing is saved.
+    return NextResponse.json({
+      reply: text,
+      handoff,
+      booking,
+      booking_malformed: bookingMalformed,
+    })
   } catch (err) {
     if (err instanceof AiError) {
       return NextResponse.json(

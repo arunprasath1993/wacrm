@@ -13,6 +13,14 @@ import {
 } from '@/lib/flows/meta-send'
 import { sendTypingIndicator } from '@/lib/whatsapp/meta-api'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
+import { resolveTimeZone } from './usage-days'
+import { loadBookingContext } from '@/lib/bookings/load'
+import { loadCustomerMemory } from '@/lib/bookings/memory'
+import { saveBookingFromAi } from '@/lib/bookings/save'
+
+/** Sent when the model recorded a booking but wrote no message with it. */
+const BOOKING_SAVED_FALLBACK =
+  'Thank you! Your details are saved and our team will be in touch.'
 
 interface DispatchArgs {
   /** Tenancy key — drives config, contact, and whatsapp_config lookups. */
@@ -130,13 +138,20 @@ export async function dispatchInboundToAiReply(
       latestUserMessage(messages),
     )
 
+    const { types: bookingTypes, timeZone } = await loadBookingContext(db, accountId)
+    const customerMemory = await loadCustomerMemory(db, accountId, contactId, timeZone)
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
+      now: new Date(),
+      timeZone,
+      bookingTypes,
+      customerMemory,
     })
 
-    const { text, handoff, usage } = await generateReply({
+    const { text, handoff, usage, booking, bookingMalformed } = await generateReply({
       config,
       systemPrompt,
       messages,
@@ -156,7 +171,25 @@ export async function dispatchInboundToAiReply(
       usage,
     })
 
-    if (handoff || !text) {
+    // Saved ahead of every exit below — a lost reply slot, a newer
+    // inbound or a handoff must not lose what the customer just agreed.
+    const savedBooking = booking
+      ? await saveBookingFromAi({
+          db,
+          accountId,
+          contactId,
+          conversationId,
+          ownerUserId: configOwnerUserId,
+          handoffAgentId: config.handoffAgentId,
+          types: bookingTypes,
+          timeZone: resolveTimeZone(timeZone),
+          marker: booking,
+        })
+      : null
+    // The reply says "booked", so it can only go out if that is true.
+    const bookingFailed = bookingMalformed || savedBooking?.ok === false
+
+    if (handoff || bookingFailed || (!text && !savedBooking)) {
       // The model can't (or shouldn't) answer — stop auto-replying on
       // this thread and hand it to a human. We (a) pause the bot here
       // (sticky until re-enabled), (b) route the conversation to the
@@ -215,9 +248,24 @@ export async function dispatchInboundToAiReply(
       userId: configOwnerUserId,
       conversationId,
       contactId,
-      text,
+      text: text || BOOKING_SAVED_FALLBACK,
       aiGenerated: true,
     })
+
+    // After the send, so the customer's last message from the bot is the
+    // confirmation. Assigning fires `on_conversation_assigned` and stops
+    // the bot in this thread, which is why it is opt-in per type.
+    if (
+      savedBooking?.ok &&
+      savedBooking.type.handoff_on_confirm &&
+      savedBooking.booking?.assigned_to &&
+      (savedBooking.outcome === 'created' || savedBooking.outcome === 'updated')
+    ) {
+      await db
+        .from('conversations')
+        .update({ assigned_agent_id: savedBooking.booking.assigned_to })
+        .eq('id', conversationId)
+    }
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)
   }

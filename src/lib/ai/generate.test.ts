@@ -39,9 +39,41 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+describe('parseGeneration — booking marker', () => {
+  const MARKER =
+    '[[BOOKING]]{"type":"online_demo","action":"save","fields":{"name":"Ramu"}}[[/BOOKING]]'
+
+  it('returns the booking and removes the marker from the text', () => {
+    const result = parseGeneration(`Booked!\n${MARKER}`)
+    expect(result.text).toBe('Booked!')
+    expect(result.booking?.type).toBe('online_demo')
+    expect(result.bookingMalformed).toBe(false)
+  })
+
+  it('flags a marker it cannot read, without leaking it', () => {
+    const result = parseGeneration('Booked!\n[[BOOKING]]{broken')
+    expect(result.text).toBe('Booked!')
+    expect(result.booking).toBeNull()
+    expect(result.bookingMalformed).toBe(true)
+  })
+
+  it('handles a marker alongside a handoff', () => {
+    const result = parseGeneration(`${MARKER}\n[[HANDOFF]]`)
+    expect(result.text).toBe('')
+    expect(result.handoff).toBe(true)
+    expect(result.booking?.type).toBe('online_demo')
+  })
+
+  it('reports no booking for a plain reply', () => {
+    const result = parseGeneration('Hello')
+    expect(result.booking).toBeNull()
+    expect(result.bookingMalformed).toBe(false)
+  })
+})
+
 describe('parseGeneration', () => {
   it('returns text with no handoff', () => {
-    expect(parseGeneration('Hello there')).toEqual({
+    expect(parseGeneration('Hello there')).toMatchObject({
       text: 'Hello there',
       handoff: false,
       usage: null,
@@ -49,12 +81,12 @@ describe('parseGeneration', () => {
   })
 
   it('detects + strips the handoff sentinel', () => {
-    expect(parseGeneration('[[HANDOFF]]')).toEqual({
+    expect(parseGeneration('[[HANDOFF]]')).toMatchObject({
       text: '',
       handoff: true,
       usage: null,
     })
-    expect(parseGeneration('Let me get a human [[HANDOFF]]')).toEqual({
+    expect(parseGeneration('Let me get a human [[HANDOFF]]')).toMatchObject({
       text: 'Let me get a human',
       handoff: true,
       usage: null,
@@ -69,7 +101,7 @@ describe('parseGeneration', () => {
 
   it('passes usage straight through', () => {
     const usage = { promptTokens: 10, completionTokens: 5, totalTokens: 15 }
-    expect(parseGeneration('Hi', usage)).toEqual({
+    expect(parseGeneration('Hi', usage)).toMatchObject({
       text: 'Hi',
       handoff: false,
       usage,
@@ -93,7 +125,7 @@ describe('generateReply — OpenAI', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     })
 
-    expect(res).toEqual({
+    expect(res).toMatchObject({
       text: 'Sure — happy to help!',
       handoff: false,
       usage: { promptTokens: 42, completionTokens: 8, totalTokens: 50 },
@@ -152,7 +184,7 @@ describe('generateReply — Anthropic', () => {
     })
 
     // Anthropic reports input/output only — total is summed by normalizeUsage.
-    expect(res).toEqual({
+    expect(res).toMatchObject({
       text: 'Hi there!',
       handoff: false,
       usage: { promptTokens: 30, completionTokens: 6, totalTokens: 36 },
@@ -224,7 +256,7 @@ describe('generateReply — OpenAI-compatible', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     })
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       text: 'Gateway reply',
       handoff: false,
       usage: { promptTokens: 12, completionTokens: 4, totalTokens: 16 },

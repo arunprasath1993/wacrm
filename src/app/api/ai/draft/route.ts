@@ -10,6 +10,8 @@ import { latestUserMessage } from '@/lib/ai/query'
 import { logAiUsage } from '@/lib/ai/usage'
 import { supabaseAdmin } from '@/lib/ai/admin-client'
 import { AiError } from '@/lib/ai/types'
+import { loadBookingContext } from '@/lib/bookings/load'
+import { loadCustomerMemory } from '@/lib/bookings/memory'
 import { getT } from '@/lib/i18n/translate'
 
 const t = getT('Api')
@@ -50,7 +52,7 @@ export async function POST(request: Request) {
     // row means "not yours / not found" either way.
     const { data: conversation, error: convErr } = await supabase
       .from('conversations')
-      .select('id')
+      .select('id, contact_id')
       .eq('id', conversationId)
       .maybeSingle()
     if (convErr) {
@@ -101,10 +103,20 @@ export async function POST(request: Request) {
       latestUserMessage(messages),
     )
 
+    // Drafts get the date and memory but never the booking protocol: a
+    // human decides what to send, so nothing is recorded from a draft.
+    const { timeZone } = await loadBookingContext(supabase, accountId)
+    const customerMemory = conversation.contact_id
+      ? await loadCustomerMemory(supabase, accountId, conversation.contact_id, timeZone)
+      : null
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'draft',
       knowledge,
+      now: new Date(),
+      timeZone,
+      customerMemory,
     })
 
     const { text, usage } = await generateReply({ config, systemPrompt, messages })

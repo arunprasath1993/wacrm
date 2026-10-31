@@ -6,6 +6,8 @@
 // whether the account is on OpenAI or Anthropic.
 // ============================================================
 
+import type { BookingMarker } from '@/lib/bookings/types'
+
 export type AiProvider = 'openai' | 'anthropic' | 'openai_compatible'
 
 /**
@@ -64,6 +66,10 @@ export interface GenerateResult {
   handoff: boolean
   /** Provider token usage for this call, or null when unavailable. */
   usage: AiUsage | null
+  /** The booking the model recorded this turn, if any. */
+  booking: BookingMarker | null
+  /** The model tried to record a booking but it could not be read. */
+  bookingMalformed: boolean
 }
 
 /**
