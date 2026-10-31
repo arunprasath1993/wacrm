@@ -10,6 +10,7 @@ import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import {
   Bell,
   Bot,
+  CalendarClock,
   CircleHelp,
   Crown,
   GitBranch,
@@ -113,6 +114,7 @@ const navGroups: { labelKey: string | null; items: NavItem[] }[] = [
     labelKey: "groupCustomers",
     items: [
       { href: "/contacts", labelKey: "contacts", icon: Users },
+      { href: "/bookings", labelKey: "bookings", icon: CalendarClock },
       { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
     ],
   },

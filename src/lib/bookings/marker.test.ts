@@ -70,8 +70,8 @@ describe('extractBookingMarker', () => {
   })
 
   it('defaults a missing action to save', () => {
-    const { action: _omit, ...rest } = VALID
-    expect(extractBookingMarker(json(rest)).marker?.action).toBe('save')
+    const marker = extractBookingMarker(json({ ...VALID, action: undefined })).marker
+    expect(marker?.action).toBe('save')
   })
 
   it('drops non-string field values and caps long ones', () => {

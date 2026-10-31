@@ -66,6 +66,14 @@ export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
         filters.push((row) => values.includes(row[column]))
         return builder
       },
+      lte: (column: string, value: string) => {
+        filters.push((row) => row[column] != null && String(row[column]) <= value)
+        return builder
+      },
+      gt: (column: string, value: string) => {
+        filters.push((row) => row[column] != null && String(row[column]) > value)
+        return builder
+      },
       order: () => builder,
       limit: (count: number) => {
         limit = count

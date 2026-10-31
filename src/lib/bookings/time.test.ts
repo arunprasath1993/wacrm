@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatBookingTime, parseScheduledLocal } from './time'
+import { formatBookingTime, parseScheduledLocal, toScheduledLocal } from './time'
 
 const NOW = new Date('2026-10-31T18:00:00.000Z') // 23:30 on Oct 31 in IST
 
@@ -34,6 +34,27 @@ describe('parseScheduledLocal', () => {
     expect(parseScheduledLocal('tomorrow 11 AM', 'Asia/Kolkata', NOW)).toBeNull()
     expect(parseScheduledLocal('2026-11-01T11:00:00Z', 'Asia/Kolkata', NOW)).toBeNull()
     expect(parseScheduledLocal(null, 'Asia/Kolkata', NOW)).toBeNull()
+  })
+})
+
+describe('toScheduledLocal', () => {
+  it('renders an instant as a wall-clock input value in the account timezone', () => {
+    expect(toScheduledLocal('2026-11-01T05:30:00.000Z', 'Asia/Kolkata')).toBe(
+      '2026-11-01T11:00',
+    )
+  })
+
+  it('round-trips through parseScheduledLocal', () => {
+    const local = toScheduledLocal('2026-11-02T14:00:00.000Z', 'America/New_York')
+    expect(parseScheduledLocal(local, 'America/New_York', NOW)?.toISOString()).toBe(
+      '2026-11-02T14:00:00.000Z',
+    )
+  })
+
+  it('renders midnight as 00, not 24', () => {
+    expect(toScheduledLocal('2026-11-01T18:30:00.000Z', 'Asia/Kolkata')).toBe(
+      '2026-11-02T00:00',
+    )
   })
 })
 

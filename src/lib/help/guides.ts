@@ -283,6 +283,40 @@ export const HELP_GUIDES: HelpGuide[] = [
 
   // ------------------------------------------------------------------
   {
+    id: "bookings",
+    route: "/bookings",
+    group: "customers",
+    title: { en: "Bookings", ta: "Bookings" },
+    summary: {
+      en: "Every demo, visit and callback the AI agent agrees in chat, as a task and on the calendar.",
+      ta: "AI agent chat-ல் உறுதி செய்யும் ஒவ்வொரு demo, visit, callback-உம் task-ஆகவும் calendar-லும் தெரியும்.",
+    },
+    sections: [
+      {
+        heading: { en: "Set it up", ta: "Setup செய்வது" },
+        steps: [
+          { en: "Go to Settings → Booking types and check the business timezone.", ta: "Settings → Booking types-க்கு சென்று business timezone-ஐ சரிபாருங்கள்." },
+          { en: "Click New type and name it, for example Online demo or Installation.", ta: "'New type' அழுத்தி பெயர் கொடுங்கள் — உதா. Online demo அல்லது Installation." },
+          { en: "List the details the AI should collect, and mark the ones it must have.", ta: "AI கேட்க வேண்டிய விவரங்களைச் சேர்த்து, கட்டாயமானவற்றை Required என்று குறியுங்கள்." },
+          { en: "Choose who follows up, then test it in AI Agents → Playground.", ta: "யார் follow up செய்வார் என்று தேர்வு செய்து, AI Agents → Playground-ல் test செய்யுங்கள்." },
+        ],
+      },
+      {
+        heading: { en: "Follow up", ta: "Follow up செய்வது" },
+        points: [
+          { en: "Tasks lists what needs doing, with anything marked Needs review on top.", ta: "Tasks-ல் செய்ய வேண்டியவை தெரியும்; Needs review உள்ளவை மேலே இருக்கும்." },
+          { en: "Needs review means a required detail or the time is missing. Open it and fill the gap with the customer.", ta: "Needs review என்றால் கட்டாய விவரம் அல்லது நேரம் இல்லை. அதைத் திறந்து customer-உடன் சரிசெய்யுங்கள்." },
+          { en: "Calendar shows everything that has a date and time.", ta: "தேதி, நேரம் உள்ள அனைத்தும் Calendar-ல் தெரியும்." },
+          { en: "The assigned agent gets a notification, and a reminder before the time.", ta: "Assign செய்யப்பட்ட agent-க்கு notification-உம், நேரத்துக்கு முன் reminder-உம் வரும்." },
+          { en: "A contact has one open booking per type. If the customer changes the time, the same booking updates.", ta: "ஒரு contact-க்கு ஒரு type-ல் ஒரு open booking மட்டுமே. Customer நேரத்தை மாற்றினால் அதே booking update ஆகும்." },
+        ],
+      },
+    ],
+    related: ["contacts", "pipelines"],
+  },
+
+  // ------------------------------------------------------------------
+  {
     id: "broadcasts",
     route: "/broadcasts",
     group: "campaigns",

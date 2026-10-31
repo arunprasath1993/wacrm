@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   Coins,
   FileText,
   Inbox,
@@ -34,6 +35,7 @@ export const SETTINGS_SECTIONS = [
   'quick-replies',
   'inbox',
   'fields',
+  'booking-types',
   'deals',
   'members',
   'api',
@@ -62,6 +64,12 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   'quick-replies': { id: 'quick-replies', label: 'Quick replies', icon: Zap, group: 'workspace' },
   inbox: { id: 'inbox', label: 'Inbox', icon: Inbox, group: 'workspace' },
   fields: { id: 'fields', label: 'Fields & tags', icon: Tags, group: 'workspace' },
+  'booking-types': {
+    id: 'booking-types',
+    label: 'Booking types',
+    icon: CalendarClock,
+    group: 'workspace',
+  },
   deals: { id: 'deals', label: 'Deals & currency', icon: Coins, group: 'workspace' },
   members: { id: 'members', label: 'Team members', icon: UsersRound, group: 'workspace' },
   api: { id: 'api', label: 'API keys', icon: KeyRound, group: 'workspace' },
