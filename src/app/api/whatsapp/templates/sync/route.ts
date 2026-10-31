@@ -6,12 +6,17 @@ import {
   toErrorResponse,
 } from '@/lib/auth/account'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { isMediaHeaderKind } from '@/lib/whatsapp/media-header-types'
+import { mirrorTemplateHeaderMedia } from '@/lib/whatsapp/template-header-mirror'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
 import type { TemplateButton, TemplateSampleValues } from '@/types'
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit'
 import { getT } from '@/lib/i18n/translate'
 
 const t = getT('Api')
+
+// The sync loop below shadows `t` with the template it's iterating.
+const headerMirrorFailedMessage = () => t('templates.headerMirrorFailed')
 
 /**
  * Sync message templates from Meta → local message_templates table.
@@ -248,7 +253,7 @@ export async function POST() {
 
       const { data: existing, error: lookupErr } = await supabase
         .from('message_templates')
-        .select('id')
+        .select('id, header_media_url')
         .eq('account_id', accountId)
         .eq('name', t.name)
         .eq('language', t.language)
@@ -263,10 +268,35 @@ export async function POST() {
         continue
       }
 
+      // Meta only hands back an expiring sample URL for a media header, and
+      // the send builder needs a stable link. A URL already on the row wins:
+      // it may be the file the user uploaded when submitting the template.
+      const sampleUrl = header?.example?.header_handle?.[0]
+      let mirroredUrl: string | null = null
+      if (isMediaHeaderKind(headerType) && sampleUrl && !existing?.header_media_url) {
+        mirroredUrl = await mirrorTemplateHeaderMedia({
+          storage: supabase.storage,
+          accountId,
+          metaTemplateId: t.id,
+          kind: headerType,
+          sampleUrl,
+        })
+        if (!mirroredUrl) {
+          errors.push({
+            name: t.name,
+            language: t.language,
+            message: headerMirrorFailedMessage(),
+          })
+        }
+      }
+      const rowToWrite = mirroredUrl
+        ? { ...row, header_media_url: mirroredUrl }
+        : row
+
       if (existing?.id) {
         const { error: updErr } = await supabase
           .from('message_templates')
-          .update(row)
+          .update(rowToWrite)
           .eq('id', existing.id)
         if (updErr) {
           errors.push({
@@ -280,7 +310,7 @@ export async function POST() {
       } else {
         const { error: insErr } = await supabase
           .from('message_templates')
-          .insert(row)
+          .insert(rowToWrite)
         if (insErr) {
           errors.push({
             name: t.name,

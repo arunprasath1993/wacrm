@@ -2970,6 +2970,7 @@
       "authNotEditable": "Modelos de AUTENTICAÇÃO não podem ser editados aqui — gerencie-os no Gerenciador do WhatsApp da Meta.",
       "validationFailed": "Falha na validação.",
       "headerUploadFailed": "Falha ao enviar a mídia do cabeçalho.",
+      "headerMirrorFailed": "Não foi possível copiar a mídia do cabeçalho da Meta, então este modelo ainda não pode ser enviado. Sincronize novamente para tentar de novo.",
       "metaEditFailed": "Falha ao editar na Meta.",
       "editedSaveFailed": "Editado na Meta, mas falhou ao salvar localmente: {message}. Use \"Sincronizar da Meta\" para recuperar.",
       "editFailed": "Falha ao editar o modelo.",

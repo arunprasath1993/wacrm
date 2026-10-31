@@ -2970,6 +2970,7 @@
       "authNotEditable": "AUTHENTICATION templates are not editable here — manage them in Meta WhatsApp Manager.",
       "validationFailed": "Validation failed.",
       "headerUploadFailed": "Header media upload failed.",
+      "headerMirrorFailed": "Couldn't copy the header media from Meta, so this template can't be sent yet. Sync again to retry.",
       "metaEditFailed": "Meta edit failed.",
       "editedSaveFailed": "Edited on Meta but failed to save locally: {message}. Run \"Sync from Meta\" to recover.",
       "editFailed": "Failed to edit template.",

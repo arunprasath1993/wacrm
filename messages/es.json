@@ -2970,6 +2970,7 @@
       "authNotEditable": "Las plantillas de AUTENTICACIÓN no se pueden editar aquí: adminístralas en el Administrador de WhatsApp de Meta.",
       "validationFailed": "Error de validación.",
       "headerUploadFailed": "Error al subir el archivo multimedia del encabezado.",
+      "headerMirrorFailed": "No se pudo copiar el archivo multimedia del encabezado desde Meta, así que esta plantilla aún no se puede enviar. Sincroniza de nuevo para reintentar.",
       "metaEditFailed": "Error al editar en Meta.",
       "editedSaveFailed": "Editada en Meta, pero falló el guardado local: {message}. Usa \"Sincronizar desde Meta\" para recuperarla.",
       "editFailed": "Error al editar la plantilla.",

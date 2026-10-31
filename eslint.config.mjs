@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Vendored minified opus-recorder encoder worker (served statically).
     "public/opus/**",
+    // Standalone CommonJS webhook sample, not part of the Next.js app.
+    "app.js",
   ]),
 ]);
 
