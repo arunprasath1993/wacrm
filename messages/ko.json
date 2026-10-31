@@ -2970,6 +2970,7 @@
       "authNotEditable": "AUTHENTICATION 템플릿은 여기서 수정할 수 없습니다 — Meta WhatsApp 관리자에서 관리하세요.",
       "validationFailed": "유효성 검사에 실패했습니다.",
       "headerUploadFailed": "헤더 미디어 업로드에 실패했습니다.",
+      "headerMirrorFailed": "Meta에서 헤더 미디어를 복사하지 못해 이 템플릿을 아직 보낼 수 없습니다. 다시 동기화해 주세요.",
       "metaEditFailed": "Meta에서 수정하지 못했습니다.",
       "editedSaveFailed": "Meta에서 수정되었지만 로컬에 저장하지 못했습니다: {message}. 복구하려면 \"Meta에서 동기화\"를 실행하세요.",
       "editFailed": "템플릿을 수정하지 못했습니다.",
