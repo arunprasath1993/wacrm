@@ -200,6 +200,14 @@ describe('saveBookingFromAi — existing open booking', () => {
     expect(db.tables.contact_notes[1].note_text).toContain('Monday 3 PM')
   })
 
+  it('treats the same time in other words as no change', async () => {
+    await save(marker())
+    const result = await save(marker({ scheduledText: 'Sunday 11' }))
+
+    expect(result).toMatchObject({ ok: true, outcome: 'unchanged' })
+    expect(db.tables.contact_notes).toHaveLength(1)
+  })
+
   it('does nothing when the model repeats the same details', async () => {
     await save(marker())
     const result = await save(marker())
@@ -530,6 +538,22 @@ describe('saveBookingFromAi — chats handled by an agent', () => {
     )
     expect(result).toMatchObject({ ok: true, outcome: 'updated' })
     expect(db.tables.bookings).toHaveLength(1)
+  })
+
+  it('honours a choice the chat shows the customer made', async () => {
+    await save(marker(), agentChat)
+    const result = await save(
+      marker({
+        scheduledLocal: '2026-11-02T15:00',
+        scheduledText: 'Monday 3 PM',
+        onExisting: 'replace',
+      }),
+      agentChat,
+    )
+
+    expect(result).toMatchObject({ ok: true, outcome: 'created' })
+    expect(db.tables.bookings[0].status).toBe('cancelled')
+    expect(db.tables.bookings).toHaveLength(2)
   })
 
   it('does not recreate a booking already closed, from old messages', async () => {

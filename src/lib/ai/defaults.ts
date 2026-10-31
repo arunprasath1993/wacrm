@@ -1,5 +1,6 @@
 import type { AiProvider } from './types'
 import {
+  BOOKING_MARKER_REMINDER,
   bookingProtocolSection,
   currentTimeSection,
   customerMemorySection,
@@ -125,6 +126,10 @@ export function buildSystemPrompt(args: {
           .map((k, i) => `[${i + 1}] ${k}`)
           .join('\n\n---\n\n')}`,
     )
+  }
+
+  if (mode === 'auto_reply' && bookingTypes?.length) {
+    parts.push(BOOKING_MARKER_REMINDER)
   }
 
   return parts.join('\n\n')

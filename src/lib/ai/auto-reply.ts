@@ -14,6 +14,7 @@ import {
 import { sendTypingIndicator } from '@/lib/whatsapp/meta-api'
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { resolveTimeZone } from './usage-days'
+import { extractBookingFromChat } from '@/lib/bookings/capture'
 import { loadBookingContext } from '@/lib/bookings/load'
 import { loadCustomerMemory } from '@/lib/bookings/memory'
 import { saveBookingFromAi } from '@/lib/bookings/save'
@@ -157,7 +158,13 @@ export async function dispatchInboundToAiReply(
       customerMemory,
     })
 
-    const { text, handoff, usage, booking, bookingMalformed } = await generateReply({
+    const {
+      text,
+      handoff,
+      usage,
+      booking: markerBooking,
+      bookingMalformed,
+    } = await generateReply({
       config,
       systemPrompt,
       messages,
@@ -177,6 +184,40 @@ export async function dispatchInboundToAiReply(
       usage,
     })
 
+    const zone = resolveTimeZone(timeZone)
+
+    // The model often confirms in words and forgets the marker, which
+    // would tell the customer "booked" with nothing behind it. So a reply
+    // without one is checked before it goes out. A question can't be a
+    // confirmation, and skipping those avoids most of the extra call.
+    const mayConfirm =
+      bookingTypes.length > 0 &&
+      !handoff &&
+      !markerBooking &&
+      Boolean(text) &&
+      !text.trim().endsWith('?')
+    const extraction = mayConfirm
+      ? await extractBookingFromChat({
+          config,
+          types: bookingTypes,
+          timeZone: zone,
+          customerMemory,
+          messages,
+          draftReply: text,
+        })
+      : null
+    if (extraction) {
+      void logAiUsage(db, {
+        accountId,
+        conversationId,
+        mode: 'auto_reply',
+        provider: config.provider,
+        model: config.model,
+        usage: extraction.usage,
+      })
+    }
+    const booking = markerBooking ?? extraction?.booking ?? null
+
     // Saved ahead of every exit below — a lost reply slot, a newer
     // inbound or a handoff must not lose what the customer just agreed.
     const savedBooking = booking
@@ -188,7 +229,7 @@ export async function dispatchInboundToAiReply(
           ownerUserId: configOwnerUserId,
           handoffAgentId: config.handoffAgentId,
           types: bookingTypes,
-          timeZone: resolveTimeZone(timeZone),
+          timeZone: zone,
           marker: booking,
         })
       : null
@@ -216,7 +257,9 @@ export async function dispatchInboundToAiReply(
 
     // The reply says "booked", so it can only go out if that is true.
     const bookingFailed =
-      bookingMalformed || savedBooking?.ok === false || (needsFollowUp && !followUp)
+      (bookingMalformed && !booking) ||
+      savedBooking?.ok === false ||
+      (needsFollowUp && !followUp)
 
     if (handoff || bookingFailed || (!text && !savedBooking)) {
       // The model can't (or shouldn't) answer — stop auto-replying on

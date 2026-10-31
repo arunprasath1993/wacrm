@@ -48,6 +48,16 @@ describe('buildSystemPrompt — bookings', () => {
     expect(prompt).toContain('Mon, 2 Nov, 9:00 am')
   })
 
+  it('ends with the marker reminder, as the last thing the model reads', () => {
+    const prompt = buildSystemPrompt({
+      userPrompt: 'We sell water purifiers.',
+      mode: 'auto_reply',
+      bookingTypes: [TYPE],
+      knowledge: ['Prices start at 5000.'],
+    })
+    expect(prompt.trim().split('\n').at(-1)).toMatch(/marker/)
+  })
+
   it('never teaches the marker to an inbox draft', () => {
     const prompt = buildSystemPrompt({ userPrompt: null, mode: 'draft', bookingTypes: [TYPE] })
     expect(prompt).not.toContain('[[BOOKING]]')

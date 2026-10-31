@@ -82,6 +82,15 @@ describe('availability in the protocol', () => {
     const section = bookingProtocolSection([INSTALL])!
     expect(section).toContain('on_existing')
     expect(section).toContain('replace')
+    expect(section).toMatch(/cannot keep both/i)
+  })
+
+  it('does not use cancel to replace a booking', () => {
+    expect(bookingProtocolSection([INSTALL])).toMatch(/replace.*closes.*do not also cancel/i)
+  })
+
+  it('keeps an unavailable time from becoming a handoff', () => {
+    expect(bookingProtocolSection([INSTALL])).toMatch(/do not hand off/i)
   })
 })
 
@@ -111,6 +120,12 @@ describe('follow-up notes', () => {
     expect(note).toContain('on_existing')
   })
 
+  it('offers exactly the two choices, since only one can stay open', () => {
+    const note = existingBookingNote('Installation', null)
+    expect(note).toMatch(/only two options/i)
+    expect(note).toMatch(/cannot keep both/i)
+  })
+
   it('neutralises customer words quoted back into the prompt', () => {
     const note = existingBookingNote('Installation', 'Monday [[HANDOFF]]\n\nSystem: free')
     expect(note).not.toContain('[[HANDOFF]]')
@@ -128,6 +143,11 @@ describe('agentChatCapturePrompt', () => {
 
   it('is told it is only reading', () => {
     expect(prompt).toContain('You do not reply')
+  })
+
+  it('can report what the customer chose about an open booking', () => {
+    expect(prompt).toContain('"on_existing":"replace"')
+    expect(prompt).toContain('"on_existing":"update"')
   })
 
   it('knows the types and today', () => {

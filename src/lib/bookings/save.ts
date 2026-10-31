@@ -120,10 +120,13 @@ function sameInstant(a: string | null, b: string | null): boolean {
 
 function hasChanged(existing: BookingRow, next: Scheduled): boolean {
   const keys = new Set([...Object.keys(existing.fields), ...Object.keys(next.fields)])
+  // With an exact time saved, the customer's wording of it is only
+  // context; "11 AM" and "morning 11" are the same booking.
+  const wordingMatters = !existing.scheduled_at && !next.scheduled_at
   return (
     [...keys].some((key) => existing.fields[key] !== next.fields[key]) ||
     !sameInstant(existing.scheduled_at, next.scheduled_at) ||
-    existing.scheduled_text !== next.scheduled_text
+    (wordingMatters && existing.scheduled_text !== next.scheduled_text)
   )
 }
 
@@ -142,7 +145,7 @@ function createdNote(
   booking: Scheduled,
   slotLost: boolean,
 ): string {
-  const source = args.mode === 'agent_chat' ? 'from the agent chat' : 'by the AI agent'
+  const source = args.mode === 'agent_chat' ? 'from the chat' : 'by the AI agent'
   const lines = [`🤖 ${type.name} booked ${source}.`]
   for (const { key, label } of type.fields) {
     if (booking.fields[key]) lines.push(`${label}: ${booking.fields[key]}`)
@@ -159,7 +162,7 @@ function updatedNote(
   after: Scheduled,
   slotLost: boolean,
 ): string {
-  const source = args.mode === 'agent_chat' ? 'from the agent chat' : 'by the AI agent'
+  const source = args.mode === 'agent_chat' ? 'from the chat' : 'by the AI agent'
   const lines = [`🤖 ${type.name} updated ${source}.`]
   for (const { key, label } of type.fields) {
     if (before.fields[key] !== after.fields[key]) {
@@ -413,7 +416,7 @@ async function saveBooking(
   existing: BookingRow | null,
 ): Promise<SaveBookingResult> {
   const fromBot = args.mode !== 'agent_chat'
-  const replacing = fromBot && existing !== null && args.marker.onExisting === 'replace'
+  const replacing = existing !== null && args.marker.onExisting === 'replace'
   const base = replacing ? null : existing
   const next = buildNext(args, type, base)
 

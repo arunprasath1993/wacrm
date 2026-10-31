@@ -50,14 +50,19 @@ function parseMarker(body: string): BookingMarker | null {
   const action = raw.action ?? 'save'
   if (!type || (action !== 'save' && action !== 'cancel')) return null
 
+  const onExisting =
+    raw.on_existing === 'update' || raw.on_existing === 'replace' ? raw.on_existing : null
+
   return {
     type,
-    action,
+    // Models read "close the old one and book anew" as a cancel. Taken
+    // literally that would lose the new booking; replacing closes the
+    // old one anyway.
+    action: onExisting === 'replace' ? 'save' : action,
     fields: cleanFields(raw.fields),
     scheduledLocal: cleanString(raw.scheduled_local),
     scheduledText: cleanString(raw.scheduled_text),
-    onExisting:
-      raw.on_existing === 'update' || raw.on_existing === 'replace' ? raw.on_existing : null,
+    onExisting,
   }
 }
 

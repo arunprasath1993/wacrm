@@ -34,6 +34,14 @@ describe('extractBookingMarker', () => {
     })
   })
 
+  it('treats cancel-and-replace as a save, or the new booking would be lost', () => {
+    const marker = extractBookingMarker(
+      json({ ...VALID, action: 'cancel', on_existing: 'replace' }),
+    ).marker
+    expect(marker?.action).toBe('save')
+    expect(marker?.onExisting).toBe('replace')
+  })
+
   it('reads the customer decision about an existing booking', () => {
     const read = (value: unknown) =>
       extractBookingMarker(json({ ...VALID, on_existing: value })).marker?.onExisting

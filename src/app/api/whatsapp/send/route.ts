@@ -1,5 +1,5 @@
 import { after, NextResponse } from 'next/server'
-import { captureBookingFromAgentChat } from '@/lib/bookings/capture'
+import { captureBookingFromChat } from '@/lib/bookings/capture'
 import { createClient } from '@/lib/supabase/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import {
@@ -177,7 +177,7 @@ export async function POST(request: Request) {
       if (message_type === 'text') {
         const chatId = conversationId
         after(() =>
-          captureBookingFromAgentChat({
+          captureBookingFromChat({
             accountId,
             conversationId: chatId,
             noteUserId: userId,
