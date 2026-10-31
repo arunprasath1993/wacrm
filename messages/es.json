@@ -2315,7 +2315,14 @@
       "active": "Activo",
       "activeDesc": "Los tipos inactivos siguen en las reservas existentes, pero la IA deja de ofrecerlos.",
       "save": "Guardar",
-      "saveFailed": "No se pudo guardar"
+      "saveFailed": "No se pudo guardar",
+      "availableDays": "Días y horario de trabajo",
+      "availabilityDesc": "La IA solo confirma horas dentro de este horario que sigan libres.",
+      "availableFrom": "Desde",
+      "availableTo": "Hasta",
+      "slotCapacity": "Reservas al mismo tiempo",
+      "slotLimited": "Limitar reservas al mismo tiempo",
+      "slotCapacityDesc": "Por ejemplo, 1 presentador o 3 equipos de instalación. Desactívalo para no poner límite."
     }
   },
   "SignupPage": {
@@ -3052,7 +3059,10 @@
       "fieldsMustBeObject": "Los campos deben ser un objeto",
       "alreadyOpen": "Este contacto ya tiene una reserva abierta de este tipo",
       "notInAccount": "Esa persona o registro no pertenece a esta cuenta",
-      "typeAndContactRequired": "El tipo de reserva y el contacto son obligatorios"
+      "typeAndContactRequired": "El tipo de reserva y el contacto son obligatorios",
+      "capacityInvalid": "Las reservas por horario deben ser un número entero de 1 a 1000",
+      "availabilityInvalid": "Elige al menos un día y un horario donde quepa una reserva",
+      "slotTaken": "Ese horario ya está completo"
     }
   },
   "Apps": {

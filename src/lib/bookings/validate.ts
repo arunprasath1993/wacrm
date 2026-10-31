@@ -29,10 +29,70 @@ export interface BookingTypeInput {
   assignee_user_id: string | null
   handoff_on_confirm: boolean
   remind_minutes_before: number | null
+  slot_capacity: number | null
+  available_days: number[]
+  available_from: string
+  available_to: string
   is_active: boolean
 }
 
 type Validated<T> = { ok: true; value: T } | { ok: false; error: string }
+
+type Availability = Pick<
+  BookingTypeInput,
+  'slot_capacity' | 'available_days' | 'available_from' | 'available_to'
+>
+
+const DEFAULT_DAYS = [1, 2, 3, 4, 5, 6]
+const CLOCK_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)(:[0-5]\d)?$/
+
+function toMinutes(clock: string): number {
+  const [hours, minutes] = clock.split(':').map(Number)
+  return hours * 60 + minutes
+}
+
+function validateAvailability(
+  body: Record<string, unknown>,
+  timeMode: BookingTimeMode,
+  durationMinutes: number,
+): Validated<Availability> {
+  const capacity = body.slot_capacity === undefined ? 1 : body.slot_capacity
+  if (capacity !== null && !isIntegerBetween(capacity, 1, 1000)) {
+    return { ok: false, error: t('bookings.capacityInvalid') }
+  }
+
+  const rawDays = body.available_days ?? DEFAULT_DAYS
+  const validDays =
+    Array.isArray(rawDays) && rawDays.every((day) => isIntegerBetween(day, 1, 7))
+  const days = validDays ? [...new Set(rawDays as number[])].sort((a, b) => a - b) : []
+
+  const from = body.available_from ?? '09:00'
+  const to = body.available_to ?? '18:00'
+  const validClock =
+    typeof from === 'string' &&
+    typeof to === 'string' &&
+    CLOCK_PATTERN.test(from) &&
+    CLOCK_PATTERN.test(to)
+  if (!validDays || !validClock) {
+    return { ok: false, error: t('bookings.availabilityInvalid') }
+  }
+
+  // A timed type with no way to fit a booking could never be confirmed.
+  const fits = toMinutes(from) + durationMinutes <= toMinutes(to)
+  if (timeMode !== 'none' && (days.length === 0 || !fits)) {
+    return { ok: false, error: t('bookings.availabilityInvalid') }
+  }
+
+  return {
+    ok: true,
+    value: {
+      slot_capacity: capacity as number | null,
+      available_days: days,
+      available_from: from.slice(0, 5),
+      available_to: to.slice(0, 5),
+    },
+  }
+}
 
 function slugify(label: string): string {
   return label
@@ -122,9 +182,17 @@ export function validateBookingType(
     return { ok: false, error: t('bookings.assigneeInvalid') }
   }
 
+  const availability = validateAvailability(
+    body,
+    body.time_mode as BookingTimeMode,
+    body.duration_minutes as number,
+  )
+  if (!availability.ok) return availability
+
   return {
     ok: true,
     value: {
+      ...availability.value,
       name,
       key: existing?.key ?? (slugify(name) || 'type'),
       fields: fields.value,

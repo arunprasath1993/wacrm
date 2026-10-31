@@ -17,6 +17,8 @@ import { resolveTimeZone } from './usage-days'
 import { loadBookingContext } from '@/lib/bookings/load'
 import { loadCustomerMemory } from '@/lib/bookings/memory'
 import { saveBookingFromAi } from '@/lib/bookings/save'
+import { loadAvailability } from '@/lib/bookings/slots'
+import type { AiConfig, AiUsage, ChatMessage } from './types'
 
 /** Sent when the model recorded a booking but wrote no message with it. */
 const BOOKING_SAVED_FALLBACK =
@@ -140,6 +142,9 @@ export async function dispatchInboundToAiReply(
 
     const { types: bookingTypes, timeZone } = await loadBookingContext(db, accountId)
     const customerMemory = await loadCustomerMemory(db, accountId, contactId, timeZone)
+    const availability = timeZone
+      ? await loadAvailability(db, accountId, bookingTypes, timeZone)
+      : {}
 
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
@@ -148,6 +153,7 @@ export async function dispatchInboundToAiReply(
       now: new Date(),
       timeZone,
       bookingTypes,
+      availability,
       customerMemory,
     })
 
@@ -186,8 +192,31 @@ export async function dispatchInboundToAiReply(
           marker: booking,
         })
       : null
+    // The slot was taken or the customer has to choose, so the reply the
+    // model wrote is wrong. It writes a new one in the customer's language.
+    const followUp =
+      !handoff && savedBooking?.ok && savedBooking.outcome === 'needs_followup'
+        ? await generateFollowUp({
+            instruction: savedBooking.instruction,
+            config,
+            systemPrompt,
+            messages,
+            log: (followUpUsage) =>
+              void logAiUsage(db, {
+                accountId,
+                conversationId,
+                mode: 'auto_reply',
+                provider: config.provider,
+                model: config.model,
+                usage: followUpUsage,
+              }),
+          })
+        : null
+    const needsFollowUp = savedBooking?.ok && savedBooking.outcome === 'needs_followup'
+
     // The reply says "booked", so it can only go out if that is true.
-    const bookingFailed = bookingMalformed || savedBooking?.ok === false
+    const bookingFailed =
+      bookingMalformed || savedBooking?.ok === false || (needsFollowUp && !followUp)
 
     if (handoff || bookingFailed || (!text && !savedBooking)) {
       // The model can't (or shouldn't) answer — stop auto-replying on
@@ -248,7 +277,7 @@ export async function dispatchInboundToAiReply(
       userId: configOwnerUserId,
       conversationId,
       contactId,
-      text: text || BOOKING_SAVED_FALLBACK,
+      text: followUp || text || BOOKING_SAVED_FALLBACK,
       aiGenerated: true,
     })
 
@@ -268,6 +297,34 @@ export async function dispatchInboundToAiReply(
     }
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)
+  }
+}
+
+/**
+ * Rewrite the reply around a system note. Null when that fails or the
+ * model bails, so the caller hands off instead of sending the original.
+ * Any marker in the rewrite is ignored: the note tells the model nothing
+ * was saved, so this turn only asks; the customer's answer books it.
+ */
+async function generateFollowUp(args: {
+  instruction: string
+  config: AiConfig
+  systemPrompt: string
+  messages: ChatMessage[]
+  log: (usage: AiUsage | null) => void
+}): Promise<string | null> {
+  const { instruction, config, systemPrompt, messages, log } = args
+  try {
+    const { text, handoff, usage } = await generateReply({
+      config,
+      systemPrompt: `${systemPrompt}\n\n${instruction}`,
+      messages,
+    })
+    log(usage)
+    return handoff ? null : text || null
+  } catch (err) {
+    console.error('[ai auto-reply] booking follow-up failed:', err)
+    return null
   }
 }
 

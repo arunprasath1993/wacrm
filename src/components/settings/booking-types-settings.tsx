@@ -44,7 +44,21 @@ interface Draft {
   handoff_on_confirm: boolean;
   remind_enabled: boolean;
   remind_minutes_before: number;
+  slot_limited: boolean;
+  slot_capacity: number;
+  available_days: number[];
+  available_from: string;
+  available_to: string;
   is_active: boolean;
+}
+
+const WEEK = [1, 2, 3, 4, 5, 6, 7];
+
+/** ISO weekday as a short name in the viewer's language. 5 Jan 2026 is a Monday. */
+function dayLabel(isoDay: number): string {
+  return new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(2026, 0, 4 + isoDay)),
+  );
 }
 
 const EMPTY_FIELD: BookingFieldDef = { key: '', label: '', required: true, maps_to: null };
@@ -59,6 +73,11 @@ const EMPTY_DRAFT: Draft = {
   handoff_on_confirm: false,
   remind_enabled: true,
   remind_minutes_before: 60,
+  slot_limited: true,
+  slot_capacity: 1,
+  available_days: [1, 2, 3, 4, 5, 6],
+  available_from: '09:00',
+  available_to: '18:00',
   is_active: true,
 };
 
@@ -74,6 +93,11 @@ function toDraft(type: StoredType): Draft {
     handoff_on_confirm: type.handoff_on_confirm,
     remind_enabled: type.remind_minutes_before !== null,
     remind_minutes_before: type.remind_minutes_before ?? 60,
+    slot_limited: type.slot_capacity !== null,
+    slot_capacity: type.slot_capacity ?? 1,
+    available_days: type.available_days,
+    available_from: type.available_from.slice(0, 5),
+    available_to: type.available_to.slice(0, 5),
     is_active: type.is_active,
   };
 }
@@ -140,7 +164,15 @@ export function BookingTypesSettings() {
     if (!draft) return;
     setSaving(true);
     try {
-      const { id, remind_enabled, remind_minutes_before, assignee_user_id, ...rest } = draft;
+      const {
+        id,
+        remind_enabled,
+        remind_minutes_before,
+        assignee_user_id,
+        slot_limited,
+        slot_capacity,
+        ...rest
+      } = draft;
       const res = await fetch(id ? `/api/booking-types/${id}` : '/api/booking-types', {
         method: id ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,6 +180,7 @@ export function BookingTypesSettings() {
           ...rest,
           assignee_user_id: assignee_user_id || null,
           remind_minutes_before: remind_enabled ? remind_minutes_before : null,
+          slot_capacity: slot_limited ? slot_capacity : null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -376,6 +409,85 @@ export function BookingTypesSettings() {
                   />
                 </div>
               </div>
+
+              {draft.time_mode !== 'none' && (
+                <div className="space-y-3 rounded-lg border border-border p-3">
+                  <div className="space-y-1.5">
+                    <Label>{t('availableDays')}</Label>
+                    <p className="text-xs text-muted-foreground">{t('availabilityDesc')}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {WEEK.map((day) => {
+                        const selected = draft.available_days.includes(day);
+                        return (
+                          <Button
+                            key={day}
+                            type="button"
+                            size="sm"
+                            variant={selected ? 'default' : 'outline'}
+                            aria-pressed={selected}
+                            onClick={() =>
+                              setDraft({
+                                ...draft,
+                                available_days: selected
+                                  ? draft.available_days.filter((d) => d !== day)
+                                  : [...draft.available_days, day],
+                              })
+                            }
+                          >
+                            {dayLabel(day)}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="type-from">{t('availableFrom')}</Label>
+                      <Input
+                        id="type-from"
+                        type="time"
+                        value={draft.available_from}
+                        onChange={(e) =>
+                          setDraft({ ...draft, available_from: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="type-to">{t('availableTo')}</Label>
+                      <Input
+                        id="type-to"
+                        type="time"
+                        value={draft.available_to}
+                        onChange={(e) => setDraft({ ...draft, available_to: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="type-capacity">{t('slotCapacity')}</Label>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={draft.slot_limited}
+                        aria-label={t('slotLimited')}
+                        onCheckedChange={(checked) =>
+                          setDraft({ ...draft, slot_limited: checked })
+                        }
+                      />
+                      <Input
+                        id="type-capacity"
+                        type="number"
+                        min={1}
+                        max={1000}
+                        disabled={!draft.slot_limited}
+                        value={draft.slot_capacity}
+                        onChange={(e) =>
+                          setDraft({ ...draft, slot_capacity: Number(e.target.value) })
+                        }
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{t('slotCapacityDesc')}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="type-instructions">{t('instructions')}</Label>

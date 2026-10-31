@@ -68,10 +68,21 @@ export function buildSystemPrompt(args: {
   timeZone?: string | null
   /** The account's active booking types (auto-reply only). */
   bookingTypes?: BookingType[]
+  /** Free times the model may offer, by booking type key. */
+  availability?: Record<string, string[]>
   /** What the CRM already knows about this customer. */
   customerMemory?: CustomerMemory | null
 }): string {
-  const { userPrompt, mode, knowledge, now, timeZone, bookingTypes, customerMemory } = args
+  const {
+    userPrompt,
+    mode,
+    knowledge,
+    now,
+    timeZone,
+    bookingTypes,
+    availability,
+    customerMemory,
+  } = args
   const parts: string[] = [
     'You are a customer-messaging assistant for a business that uses a WhatsApp CRM. ' +
       'You are shown the recent WhatsApp conversation between the business (assistant) and a customer (user). ' +
@@ -91,7 +102,7 @@ export function buildSystemPrompt(args: {
     parts.push(
       `You are replying automatically with no human in the loop. If you cannot confidently and safely help — the customer explicitly asks for a human, is upset or complaining, or the request needs information you do not have — reply with exactly ${HANDOFF_SENTINEL} and nothing else. A human agent will then take over. Prefer handing off over guessing.`,
     )
-    const bookingProtocol = bookingProtocolSection(bookingTypes ?? [])
+    const bookingProtocol = bookingProtocolSection(bookingTypes ?? [], availability)
     if (bookingProtocol) parts.push(bookingProtocol)
   }
 

@@ -30,7 +30,16 @@ describe('extractBookingMarker', () => {
       fields: { name: 'Ramu', business: 'NixAqua' },
       scheduledLocal: '2026-11-01T11:00',
       scheduledText: 'Tomorrow at 11 AM',
+      onExisting: null,
     })
+  })
+
+  it('reads the customer decision about an existing booking', () => {
+    const read = (value: unknown) =>
+      extractBookingMarker(json({ ...VALID, on_existing: value })).marker?.onExisting
+    expect(read('update')).toBe('update')
+    expect(read('replace')).toBe('replace')
+    expect(read('merge')).toBeNull()
   })
 
   it('accepts JSON wrapped in a code fence', () => {

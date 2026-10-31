@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
+import { captureBookingFromAgentChat } from '@/lib/bookings/capture'
 import { createClient } from '@/lib/supabase/server'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import {
@@ -170,6 +171,19 @@ export async function POST(request: Request) {
         replyToMessageId: reply_to_message_id,
         senderId: userId,
       })
+
+      // The agent may have just agreed a booking. After the response, so
+      // reading the chat never delays the send; it never throws.
+      if (message_type === 'text') {
+        const chatId = conversationId
+        after(() =>
+          captureBookingFromAgentChat({
+            accountId,
+            conversationId: chatId,
+            noteUserId: userId,
+          }),
+        )
+      }
 
       return NextResponse.json({
         success: true,

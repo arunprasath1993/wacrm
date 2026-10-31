@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BookingType } from './types'
 
 const TYPE_COLUMNS =
-  'id, key, name, fields, time_mode, duration_minutes, instructions, assignee_user_id, handoff_on_confirm, remind_minutes_before'
+  'id, key, name, fields, time_mode, duration_minutes, instructions, assignee_user_id, handoff_on_confirm, remind_minutes_before, slot_capacity, available_days, available_from, available_to'
 
 export interface BookingContext {
   types: BookingType[]

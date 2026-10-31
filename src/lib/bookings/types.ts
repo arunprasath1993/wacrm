@@ -32,6 +32,13 @@ export interface BookingType {
   assignee_user_id: string | null
   handoff_on_confirm: boolean
   remind_minutes_before: number | null
+  /** Bookings that may overlap. Null means no limit. */
+  slot_capacity: number | null
+  /** ISO weekdays: 1 = Monday ... 7 = Sunday. */
+  available_days: number[]
+  /** `HH:mm` or `HH:mm:ss` in the account's timezone. */
+  available_from: string
+  available_to: string
 }
 
 export interface BookingRow {
@@ -51,4 +58,9 @@ export interface BookingMarker {
   /** Wall-clock time in the account's timezone, `YYYY-MM-DDTHH:mm`. */
   scheduledLocal: string | null
   scheduledText: string | null
+  /**
+   * What the customer chose to do with their open booking of this type:
+   * change it, or close it and book afresh. Null when they weren't asked.
+   */
+  onExisting: 'update' | 'replace' | null
 }

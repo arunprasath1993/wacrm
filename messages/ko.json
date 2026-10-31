@@ -2315,7 +2315,14 @@
       "active": "활성",
       "activeDesc": "비활성 유형은 기존 예약에 남아 있지만 AI가 더 이상 제안하지 않습니다.",
       "save": "저장",
-      "saveFailed": "저장하지 못했습니다"
+      "saveFailed": "저장하지 못했습니다",
+      "availableDays": "근무 요일 및 시간",
+      "availabilityDesc": "AI는 이 시간 안에서 아직 비어 있는 시간만 확정합니다.",
+      "availableFrom": "시작",
+      "availableTo": "종료",
+      "slotCapacity": "동시 예약 수",
+      "slotLimited": "동시 예약 수 제한",
+      "slotCapacityDesc": "예: 발표자 1명 또는 설치팀 3팀. 제한이 없으면 끄세요."
     }
   },
   "SignupPage": {
@@ -3052,7 +3059,10 @@
       "fieldsMustBeObject": "항목은 객체여야 합니다",
       "alreadyOpen": "이 연락처에는 이미 이 유형의 진행 중인 예약이 있습니다",
       "notInAccount": "해당 사용자 또는 레코드는 이 계정에 없습니다",
-      "typeAndContactRequired": "예약 유형과 연락처는 필수입니다"
+      "typeAndContactRequired": "예약 유형과 연락처는 필수입니다",
+      "capacityInvalid": "시간대별 예약 수는 1~1000 사이의 정수여야 합니다",
+      "availabilityInvalid": "요일을 하나 이상 선택하고 예약이 들어갈 수 있는 시간을 설정하세요",
+      "slotTaken": "해당 시간대는 이미 마감되었습니다"
     }
   },
   "Apps": {

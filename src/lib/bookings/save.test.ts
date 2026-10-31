@@ -20,6 +20,10 @@ const DEMO: BookingType = {
   assignee_user_id: 'agent-1',
   handoff_on_confirm: false,
   remind_minutes_before: 60,
+  slot_capacity: 1,
+  available_days: [1, 2, 3, 4, 5, 6, 7],
+  available_from: '09:00',
+  available_to: '18:00',
 }
 
 const CALLBACK: BookingType = {
@@ -39,6 +43,7 @@ function marker(overrides: Partial<BookingMarker> = {}): BookingMarker {
     fields: { name: 'Ramu', business: 'NixAqua' },
     scheduledLocal: '2026-11-01T11:00',
     scheduledText: 'Tomorrow at 11 AM',
+    onExisting: null,
     ...overrides,
   }
 }
@@ -175,7 +180,7 @@ describe('saveBookingFromAi — existing open booking', () => {
   it('updates it on reschedule instead of adding a second one', async () => {
     await save(marker())
     const result = await save(
-      marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM' }),
+      marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM', onExisting: 'update' }),
     )
 
     expect(result).toMatchObject({ ok: true, outcome: 'updated' })
@@ -188,7 +193,7 @@ describe('saveBookingFromAi — existing open booking', () => {
 
   it('records the previous time in a note', async () => {
     await save(marker())
-    await save(marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM' }))
+    await save(marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM', onExisting: 'update' }))
 
     expect(db.tables.contact_notes).toHaveLength(2)
     expect(db.tables.contact_notes[1].note_text).toContain('Tomorrow at 11 AM')
@@ -205,7 +210,7 @@ describe('saveBookingFromAi — existing open booking', () => {
 
   it('keeps earlier details the new marker omits', async () => {
     await save(marker())
-    await save(marker({ fields: { notes: 'Bring pricing' } }))
+    await save(marker({ fields: { notes: 'Bring pricing' }, onExisting: 'update' }))
     expect(db.tables.bookings[0].fields).toEqual({
       name: 'Ramu',
       business: 'NixAqua',
@@ -221,7 +226,9 @@ describe('saveBookingFromAi — existing open booking', () => {
 
   it('keeps the saved time when an update has no usable one', async () => {
     await save(marker())
-    await save(marker({ scheduledLocal: null, scheduledText: null, fields: { notes: 'x' } }))
+    await save(
+      marker({ scheduledLocal: null, scheduledText: null, fields: { notes: 'x' }, onExisting: 'update' }),
+    )
     expect(db.tables.bookings[0]).toMatchObject({
       status: 'open',
       scheduled_at: '2026-11-01T05:30:00.000Z',
@@ -232,7 +239,7 @@ describe('saveBookingFromAi — existing open booking', () => {
   it('does not reassign a booking an agent already owns', async () => {
     await save(marker())
     db.tables.bookings[0].assigned_to = 'owner-1'
-    await save(marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM' }))
+    await save(marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM', onExisting: 'update' }))
     expect(db.tables.bookings[0].assigned_to).toBe('owner-1')
   })
 
@@ -255,7 +262,7 @@ describe('saveBookingFromAi — existing open booking', () => {
     db.failNext('bookings', 'insert', '23505')
 
     const result = await save(
-      marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM' }),
+      marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM', onExisting: 'update' }),
     )
 
     expect(result).toMatchObject({ ok: true, outcome: 'updated' })
@@ -310,5 +317,241 @@ describe('saveBookingFromAi — failures', () => {
     db.failNext('contacts', 'update')
     const result = await save(marker())
     expect(result).toMatchObject({ ok: true, outcome: 'created' })
+  })
+})
+
+describe('saveBookingFromAi — availability', () => {
+  const closedSunday = { ...DEMO, available_days: [1, 2, 3, 4, 5, 6] }
+
+  function holdSlot(scheduledAt: string) {
+    db.tables.bookings.push({
+      id: 'held',
+      account_id: 'acct-1',
+      contact_id: 'someone-else',
+      booking_type_id: 'type-demo',
+      status: 'open',
+      fields: {},
+      scheduled_at: scheduledAt,
+      scheduled_text: null,
+    })
+  }
+
+  it('does not book a taken slot, and asks the model to offer free times', async () => {
+    holdSlot('2026-11-01T05:30:00.000Z')
+    const result = await save(marker())
+
+    expect(result).toMatchObject({ ok: true, outcome: 'needs_followup' })
+    expect(db.tables.bookings).toHaveLength(1)
+    expect(db.tables.contact_notes).toHaveLength(0)
+    const instruction = result.ok && result.outcome === 'needs_followup' ? result.instruction : ''
+    expect(instruction).toContain('Do not')
+    expect(instruction).toMatch(/\d{1,2}:\d{2}/)
+  })
+
+  it('does not book outside working hours', async () => {
+    const result = await save(marker(), { types: [closedSunday] })
+    expect(result).toMatchObject({ ok: true, outcome: 'needs_followup' })
+    expect(db.tables.bookings).toHaveLength(0)
+  })
+
+  it('reports failure when there is no free time to offer', async () => {
+    const result = await save(marker(), { types: [{ ...DEMO, available_days: [] }] })
+    expect(result.ok).toBe(false)
+  })
+
+  it('fails closed when availability cannot be read', async () => {
+    const realFrom = db.client.from.bind(db.client)
+    let selects = 0
+    db.client.from = ((table: string) => {
+      if (table === 'bookings' && ++selects === 2) db.failNext('bookings', 'select')
+      return realFrom(table)
+    }) as unknown as typeof db.client.from
+
+    const result = await save(marker())
+    expect(result.ok).toBe(false)
+    expect(db.tables.bookings).toHaveLength(0)
+  })
+
+  it('does not re-check the slot when only the details change', async () => {
+    await save(marker())
+    const result = await save(marker({ fields: { notes: 'x' }, onExisting: 'update' }))
+    expect(result).toMatchObject({ ok: true, outcome: 'updated' })
+  })
+
+  it('lets a booking move within its own slot length', async () => {
+    await save(marker())
+    const result = await save(
+      marker({ scheduledLocal: '2026-11-01T11:15', scheduledText: '11.15', onExisting: 'update' }),
+    )
+    expect(result).toMatchObject({ ok: true, outcome: 'updated' })
+  })
+
+  it('offers free times when the database refuses a slot taken at the last moment', async () => {
+    db.failNext('bookings', 'insert', '23P01')
+    const result = await save(marker())
+    expect(result).toMatchObject({ ok: true, outcome: 'needs_followup' })
+  })
+})
+
+describe('saveBookingFromAi — customer with an open booking', () => {
+  const secondVisit = {
+    scheduledLocal: '2026-11-02T15:00',
+    scheduledText: 'Monday 3 PM',
+  }
+
+  it('asks before touching it', async () => {
+    await save(marker())
+    const result = await save(marker(secondVisit))
+
+    expect(result).toMatchObject({ ok: true, outcome: 'needs_followup' })
+    expect(db.tables.bookings[0].scheduled_text).toBe('Tomorrow at 11 AM')
+    const instruction = result.ok && result.outcome === 'needs_followup' ? result.instruction : ''
+    expect(instruction).toContain('Online Demo')
+    expect(instruction).toContain('Tomorrow at 11 AM')
+  })
+
+  it('closes it and books afresh when the customer chooses that', async () => {
+    await save(marker())
+    const result = await save(marker({ ...secondVisit, onExisting: 'replace' }))
+
+    expect(result).toMatchObject({ ok: true, outcome: 'created' })
+    expect(db.tables.bookings).toHaveLength(2)
+    expect(db.tables.bookings[0].status).toBe('cancelled')
+    expect(db.tables.bookings[1]).toMatchObject({ status: 'open', scheduled_text: 'Monday 3 PM' })
+    expect(db.tables.contact_notes.map((n) => n.note_text).join('\n')).toContain('Closed')
+  })
+
+  it('starts the new booking clean rather than inheriting old details', async () => {
+    await save(marker({ fields: { name: 'Ramu', business: 'Old', notes: 'old note' } }))
+    await save(
+      marker({ ...secondVisit, fields: { name: 'Ramu', business: 'New' }, onExisting: 'replace' }),
+    )
+    expect(db.tables.bookings[1].fields).toEqual({ name: 'Ramu', business: 'New' })
+  })
+
+  it('restores the old booking when the new slot is lost at the last moment', async () => {
+    await save(marker())
+    db.failNext('bookings', 'insert', '23P01')
+    const result = await save(marker({ ...secondVisit, onExisting: 'replace' }))
+
+    expect(result).toMatchObject({ ok: true, outcome: 'needs_followup' })
+    expect(db.tables.bookings[0].status).toBe('open')
+  })
+
+  it('restores the old booking when the new one cannot be stored', async () => {
+    await save(marker())
+    db.failNext('bookings', 'insert')
+    const result = await save(marker({ ...secondVisit, onExisting: 'replace' }))
+
+    expect(result.ok).toBe(false)
+    expect(db.tables.bookings[0].status).toBe('open')
+  })
+
+  it('checks the slot before closing anything', async () => {
+    await save(marker())
+    db.tables.bookings.push({
+      id: 'held',
+      account_id: 'acct-1',
+      contact_id: 'someone-else',
+      booking_type_id: 'type-demo',
+      status: 'open',
+      fields: {},
+      scheduled_at: '2026-11-02T09:30:00.000Z',
+    })
+    const result = await save(marker({ ...secondVisit, onExisting: 'replace' }))
+
+    expect(result).toMatchObject({ ok: true, outcome: 'needs_followup' })
+    expect(db.tables.bookings[0].status).toBe('open')
+  })
+
+  it('does not ask again while filling in a booking under review', async () => {
+    await save(marker({ fields: { name: 'Ramu' } }))
+    const result = await save(marker({ fields: { business: 'NixAqua' } }))
+    expect(result).toMatchObject({ ok: true, outcome: 'updated' })
+  })
+})
+
+describe('saveBookingFromAi — chats handled by an agent', () => {
+  const agentChat = { mode: 'agent_chat' }
+
+  function holdSlot() {
+    db.tables.bookings.push({
+      id: 'held',
+      account_id: 'acct-1',
+      contact_id: 'someone-else',
+      booking_type_id: 'type-demo',
+      status: 'open',
+      fields: {},
+      scheduled_at: '2026-11-01T05:30:00.000Z',
+    })
+  }
+
+  it('records what the agent agreed', async () => {
+    const result = await save(marker(), agentChat)
+    expect(result).toMatchObject({ ok: true, outcome: 'created' })
+    expect(db.tables.bookings[0].status).toBe('open')
+  })
+
+  it('flags a clash for the agent without holding the slot', async () => {
+    holdSlot()
+    const result = await save(marker(), agentChat)
+
+    expect(result).toMatchObject({ ok: true, outcome: 'created' })
+    expect(db.tables.bookings[1]).toMatchObject({
+      status: 'needs_review',
+      scheduled_at: null,
+      scheduled_text: 'Tomorrow at 11 AM',
+    })
+    expect(db.tables.contact_notes[0].note_text).toContain('already full')
+  })
+
+  it('flags a clash the database catches at the last moment', async () => {
+    db.failNext('bookings', 'insert', '23P01')
+    const result = await save(marker(), agentChat)
+
+    expect(result).toMatchObject({ ok: true, outcome: 'created' })
+    expect(db.tables.bookings[0]).toMatchObject({ status: 'needs_review', scheduled_at: null })
+  })
+
+  it('trusts the agent on working hours', async () => {
+    const types = [{ ...DEMO, available_days: [1, 2, 3, 4, 5, 6] }]
+    await save(marker(), { ...agentChat, types })
+    expect(db.tables.bookings[0]).toMatchObject({
+      status: 'open',
+      scheduled_at: '2026-11-01T05:30:00.000Z',
+    })
+  })
+
+  it('updates an open booking without asking anyone', async () => {
+    await save(marker(), agentChat)
+    const result = await save(
+      marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM' }),
+      agentChat,
+    )
+    expect(result).toMatchObject({ ok: true, outcome: 'updated' })
+    expect(db.tables.bookings).toHaveLength(1)
+  })
+
+  it('does not recreate a booking already closed, from old messages', async () => {
+    await save(marker(), agentChat)
+    db.tables.bookings[0].status = 'done'
+    db.tables.bookings[0].created_at = NOW.toISOString()
+
+    const result = await save(marker(), agentChat)
+
+    expect(result).toMatchObject({ ok: true, outcome: 'unchanged' })
+    expect(db.tables.bookings).toHaveLength(1)
+  })
+
+  it('records a new time after an earlier booking was closed', async () => {
+    await save(marker(), agentChat)
+    db.tables.bookings[0].status = 'done'
+    db.tables.bookings[0].created_at = NOW.toISOString()
+
+    await save(
+      marker({ scheduledLocal: '2026-11-02T15:00', scheduledText: 'Monday 3 PM' }),
+      agentChat,
+    )
+    expect(db.tables.bookings).toHaveLength(2)
   })
 })

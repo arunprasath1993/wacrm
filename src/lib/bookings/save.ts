@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { existingBookingNote, slotUnavailableNote } from './prompt'
+import { checkSlot, freeSlots, loadTakenSlots, type SlotCheck } from './slots'
 import { formatBookingTime, parseScheduledLocal } from './time'
 import {
   OPEN_BOOKING_STATUSES,
@@ -10,6 +12,8 @@ import {
 
 const BOOKING_COLUMNS = 'id, status, fields, scheduled_at, scheduled_text, assigned_to'
 const UNIQUE_VIOLATION = '23505'
+const SLOT_FULL = '23P01'
+const CLOSED_LOOKBACK_MS = 30 * 86_400_000
 
 export interface SaveBookingArgs {
   db: SupabaseClient
@@ -23,6 +27,12 @@ export interface SaveBookingArgs {
   timeZone: string
   marker: BookingMarker
   now?: Date
+  /**
+   * `bot` is talking to the customer, so anything unresolved goes back to
+   * them. `agent_chat` is only reading a chat a human runs: it can't ask
+   * anyone, so it records what happened and flags problems for the agent.
+   */
+  mode?: 'bot' | 'agent_chat'
 }
 
 export type SaveBookingResult =
@@ -30,6 +40,14 @@ export type SaveBookingResult =
       ok: true
       outcome: 'created' | 'updated' | 'cancelled' | 'unchanged'
       booking: BookingRow | null
+      type: BookingType
+    }
+  | {
+      /** Nothing was saved; the bot must put this to the customer first. */
+      ok: true
+      outcome: 'needs_followup'
+      instruction: string
+      booking: null
       type: BookingType
     }
   | { ok: false }
@@ -61,6 +79,17 @@ function resolveSchedule(
   // A new time we can't read must not leave the old one looking valid.
   const parsed = parseScheduledLocal(scheduledLocal, args.timeZone, args.now)
   return { scheduled_at: parsed?.toISOString() ?? null, scheduled_text: scheduledText }
+}
+
+function buildNext(
+  args: SaveBookingArgs,
+  type: BookingType,
+  base: BookingRow | null,
+): Scheduled {
+  return {
+    fields: { ...base?.fields, ...pickDefinedFields(type, args.marker.fields) },
+    ...resolveSchedule(args, type, base),
+  }
 }
 
 function missingDetails(type: BookingType, booking: Scheduled): string[] {
@@ -98,35 +127,48 @@ function hasChanged(existing: BookingRow, next: Scheduled): boolean {
   )
 }
 
-function createdNote(type: BookingType, booking: Scheduled, timeZone: string): string {
-  const lines = [`🤖 ${type.name} booked by the AI agent.`]
+const SLOT_LOST_LINE = '⚠️ That time is already full, so no time was saved. Agree a free slot.'
+
+function reviewLines(type: BookingType, booking: Scheduled, slotLost: boolean): string[] {
+  const lines = slotLost ? [SLOT_LOST_LINE] : []
+  const missing = missingDetails(type, booking)
+  if (missing.length > 0) lines.push(`⚠️ Needs review, missing: ${missing.join(', ')}`)
+  return lines
+}
+
+function createdNote(
+  args: SaveBookingArgs,
+  type: BookingType,
+  booking: Scheduled,
+  slotLost: boolean,
+): string {
+  const source = args.mode === 'agent_chat' ? 'from the agent chat' : 'by the AI agent'
+  const lines = [`🤖 ${type.name} booked ${source}.`]
   for (const { key, label } of type.fields) {
     if (booking.fields[key]) lines.push(`${label}: ${booking.fields[key]}`)
   }
-  const time = describeTime(booking, timeZone)
+  const time = describeTime(booking, args.timeZone)
   if (time) lines.push(`Time: ${time}`)
-  const missing = missingDetails(type, booking)
-  if (missing.length > 0) lines.push(`⚠️ Needs review, missing: ${missing.join(', ')}`)
-  return lines.join('\n')
+  return [...lines, ...reviewLines(type, booking, slotLost)].join('\n')
 }
 
 function updatedNote(
+  args: SaveBookingArgs,
   type: BookingType,
   before: BookingRow,
   after: Scheduled,
-  timeZone: string,
+  slotLost: boolean,
 ): string {
-  const lines = [`🤖 ${type.name} updated by the AI agent.`]
+  const source = args.mode === 'agent_chat' ? 'from the agent chat' : 'by the AI agent'
+  const lines = [`🤖 ${type.name} updated ${source}.`]
   for (const { key, label } of type.fields) {
     if (before.fields[key] !== after.fields[key]) {
       lines.push(`${label}: ${before.fields[key] ?? '(empty)'} → ${after.fields[key]}`)
     }
   }
-  const [was, now] = [describeTime(before, timeZone), describeTime(after, timeZone)]
+  const [was, now] = [describeTime(before, args.timeZone), describeTime(after, args.timeZone)]
   if (was !== now) lines.push(`Time: ${was ?? '(none)'} → ${now ?? '(none)'}`)
-  const missing = missingDetails(type, after)
-  if (missing.length > 0) lines.push(`⚠️ Needs review, missing: ${missing.join(', ')}`)
-  return lines.join('\n')
+  return [...lines, ...reviewLines(type, after, slotLost)].join('\n')
 }
 
 async function resolveAssignee(args: SaveBookingArgs, type: BookingType): Promise<string | null> {
@@ -151,6 +193,28 @@ async function findOpenBooking(args: SaveBookingArgs, type: BookingType) {
     .eq('booking_type_id', type.id)
     .in('status', OPEN_BOOKING_STATUSES)
     .maybeSingle()
+}
+
+// An agent chat is re-read on every message, so the agreement behind a
+// booking that is already finished stays in view for a while.
+async function wasAlreadyClosed(
+  args: SaveBookingArgs,
+  type: BookingType,
+  next: Scheduled,
+): Promise<boolean> {
+  const { data } = await args.db
+    .from('bookings')
+    .select('scheduled_at, created_at')
+    .eq('account_id', args.accountId)
+    .eq('contact_id', args.contactId)
+    .eq('booking_type_id', type.id)
+    .in('status', ['done', 'cancelled'])
+  const cutoff = (args.now ?? new Date()).getTime() - CLOSED_LOOKBACK_MS
+  return (data ?? []).some(
+    (row) =>
+      sameInstant(row.scheduled_at as string | null, next.scheduled_at) &&
+      new Date(row.created_at as string).getTime() >= cutoff,
+  )
 }
 
 // The two writes below are conveniences on top of the saved booking, so
@@ -196,19 +260,57 @@ async function fillEmptyContactColumns(
   if (error) console.error('[bookings] contact update failed:', error)
 }
 
+function followUp(type: BookingType, instruction: string): SaveBookingResult {
+  return { ok: true, outcome: 'needs_followup', instruction, booking: null, type }
+}
+
+async function slotFollowUp(
+  args: SaveBookingArgs,
+  type: BookingType,
+  next: Scheduled,
+  reason: Exclude<SlotCheck, 'free'>,
+  excludeBookingId?: string,
+): Promise<SaveBookingResult> {
+  const taken = await loadTakenSlots(
+    args.db,
+    args.accountId,
+    type.id,
+    args.now,
+    excludeBookingId,
+  )
+  if (!taken) return { ok: false }
+
+  const free = freeSlots(type, taken, args.timeZone, args.now)
+  // Nothing to offer: only a human can sort this out.
+  if (free.length === 0) return { ok: false }
+
+  return followUp(
+    type,
+    slotUnavailableNote({
+      when: describeTime(next, args.timeZone),
+      reason,
+      free: free.map((slot) => formatBookingTime(slot, args.timeZone)),
+    }),
+  )
+}
+
+async function setStatus(args: SaveBookingArgs, id: string, status: BookingStatus) {
+  return args.db
+    .from('bookings')
+    .update({ status })
+    .eq('id', id)
+    .eq('account_id', args.accountId)
+    .select(BOOKING_COLUMNS)
+    .single()
+}
+
 async function updateBooking(
   args: SaveBookingArgs,
   type: BookingType,
   existing: BookingRow,
+  next: Scheduled,
+  slotLost = false,
 ): Promise<SaveBookingResult> {
-  const next: Scheduled = {
-    fields: { ...existing.fields, ...pickDefinedFields(type, args.marker.fields) },
-    ...resolveSchedule(args, type, existing),
-  }
-  if (!hasChanged(existing, next)) {
-    return { ok: true, outcome: 'unchanged', booking: existing, type }
-  }
-
   const { data, error } = await args.db
     .from('bookings')
     .update({ ...next, status: statusFor(type, next) })
@@ -216,12 +318,19 @@ async function updateBooking(
     .eq('account_id', args.accountId)
     .select(BOOKING_COLUMNS)
     .single()
+
+  if (error?.code === SLOT_FULL) {
+    if (args.mode === 'agent_chat') {
+      return updateBooking(args, type, existing, { ...next, scheduled_at: null }, true)
+    }
+    return slotFollowUp(args, type, next, 'full', existing.id)
+  }
   if (error || !data) {
     console.error('[bookings] update failed:', error)
     return { ok: false }
   }
 
-  await addNote(args, updatedNote(type, existing, next, args.timeZone))
+  await addNote(args, updatedNote(args, type, existing, next, slotLost))
   await fillEmptyContactColumns(args, type, next.fields)
   return { ok: true, outcome: 'updated', booking: data as BookingRow, type }
 }
@@ -229,12 +338,9 @@ async function updateBooking(
 async function insertBooking(
   args: SaveBookingArgs,
   type: BookingType,
+  next: Scheduled,
+  { replaced = null, slotLost = false }: { replaced?: BookingRow | null; slotLost?: boolean } = {},
 ): Promise<SaveBookingResult> {
-  const next: Scheduled = {
-    fields: pickDefinedFields(type, args.marker.fields),
-    ...resolveSchedule(args, type, null),
-  }
-
   const { data, error } = await args.db
     .from('bookings')
     .insert({
@@ -250,18 +356,38 @@ async function insertBooking(
     .select(BOOKING_COLUMNS)
     .single()
 
+  if (error) {
+    // The old booking was closed for this one; don't leave the customer
+    // with neither.
+    if (replaced) await setStatus(args, replaced.id, replaced.status)
+  }
+
   if (error?.code === UNIQUE_VIOLATION) {
     // A concurrent inbound got there first; its row is the one to update.
     const { data: winner, error: lookupError } = await findOpenBooking(args, type)
     if (lookupError || !winner) return { ok: false }
-    return updateBooking(args, type, winner as BookingRow)
+    const row = winner as BookingRow
+    return updateBooking(args, type, row, buildNext(args, type, row))
+  }
+  if (error?.code === SLOT_FULL) {
+    if (args.mode === 'agent_chat') {
+      return insertBooking(args, type, { ...next, scheduled_at: null }, { slotLost: true })
+    }
+    return slotFollowUp(args, type, next, 'full', replaced?.id)
   }
   if (error || !data) {
     console.error('[bookings] insert failed:', error)
     return { ok: false }
   }
 
-  await addNote(args, createdNote(type, next, args.timeZone))
+  if (replaced) {
+    const when = describeTime(replaced, args.timeZone)
+    await addNote(
+      args,
+      `🤖 Closed the earlier ${type.name}${when ? ` (${when})` : ''} at the customer's request.`,
+    )
+  }
+  await addNote(args, createdNote(args, type, next, slotLost))
   await fillEmptyContactColumns(args, type, next.fields)
   return { ok: true, outcome: 'created', booking: data as BookingRow, type }
 }
@@ -271,13 +397,7 @@ async function cancelBooking(
   type: BookingType,
   existing: BookingRow,
 ): Promise<SaveBookingResult> {
-  const { data, error } = await args.db
-    .from('bookings')
-    .update({ status: 'cancelled' })
-    .eq('id', existing.id)
-    .eq('account_id', args.accountId)
-    .select(BOOKING_COLUMNS)
-    .single()
+  const { data, error } = await setStatus(args, existing.id, 'cancelled')
   if (error || !data) {
     console.error('[bookings] cancel failed:', error)
     return { ok: false }
@@ -287,11 +407,75 @@ async function cancelBooking(
   return { ok: true, outcome: 'cancelled', booking: data as BookingRow, type }
 }
 
+async function saveBooking(
+  args: SaveBookingArgs,
+  type: BookingType,
+  existing: BookingRow | null,
+): Promise<SaveBookingResult> {
+  const fromBot = args.mode !== 'agent_chat'
+  const replacing = fromBot && existing !== null && args.marker.onExisting === 'replace'
+  const base = replacing ? null : existing
+  const next = buildNext(args, type, base)
+
+  if (existing && !replacing) {
+    if (!hasChanged(existing, next)) {
+      return { ok: true, outcome: 'unchanged', booking: existing, type }
+    }
+    // A booking under review is still being completed, so filling it in
+    // isn't a change the customer needs to weigh up.
+    if (fromBot && existing.status === 'open' && !args.marker.onExisting) {
+      return followUp(
+        type,
+        existingBookingNote(type.name, describeTime(existing, args.timeZone)),
+      )
+    }
+  }
+  if (!existing && !fromBot && (await wasAlreadyClosed(args, type, next))) {
+    return { ok: true, outcome: 'unchanged', booking: null, type }
+  }
+
+  let slotLost = false
+  if (next.scheduled_at && !sameInstant(next.scheduled_at, base?.scheduled_at ?? null)) {
+    const taken = await loadTakenSlots(
+      args.db,
+      args.accountId,
+      type.id,
+      args.now,
+      existing?.id,
+    )
+    if (!taken) return { ok: false }
+
+    const slot = checkSlot(type, next.scheduled_at, taken, args.timeZone)
+    if (fromBot && slot !== 'free') {
+      return slotFollowUp(args, type, next, slot, existing?.id)
+    }
+    // Hours are the agent's call; a full slot is not, as the database
+    // would refuse it. Keep the booking but hold no time.
+    if (!fromBot && slot === 'full') {
+      next.scheduled_at = null
+      slotLost = true
+    }
+  }
+
+  if (replacing && existing) {
+    const { error } = await setStatus(args, existing.id, 'cancelled')
+    if (error) {
+      console.error('[bookings] closing earlier booking failed:', error)
+      return { ok: false }
+    }
+    return insertBooking(args, type, next, { replaced: existing })
+  }
+  return base
+    ? updateBooking(args, type, base, next, slotLost)
+    : insertBooking(args, type, next, { slotLost })
+}
+
 /**
  * Persist what the model recorded. A contact has at most one open
- * booking per type, so a repeat updates it and a change of time is a
- * reschedule. Never throws: `{ ok: false }` tells the caller nothing was
- * saved, so it must not send the customer a confirmation.
+ * booking per type, and nothing is confirmed into a slot that isn't
+ * free. Never throws: `{ ok: false }` tells the caller nothing was
+ * saved, so it must not send the customer a confirmation, and
+ * `needs_followup` tells it to ask the customer instead.
  *
  * The marker is untrusted model output. Its type must be one of the
  * account's active types, only that type's fields are kept, and the
@@ -316,9 +500,7 @@ export async function saveBookingFromAi(args: SaveBookingArgs): Promise<SaveBook
       if (!existing) return { ok: true, outcome: 'unchanged', booking: null, type }
       return await cancelBooking(args, type, existing)
     }
-    return existing
-      ? await updateBooking(args, type, existing)
-      : await insertBooking(args, type)
+    return await saveBooking(args, type, existing)
   } catch (err) {
     console.error('[bookings] save failed:', err)
     return { ok: false }

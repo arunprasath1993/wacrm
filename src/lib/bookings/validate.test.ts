@@ -72,6 +72,42 @@ describe('validateBookingType', () => {
     })
   })
 
+  it('defaults availability to one at a time, Monday to Saturday, 9 to 6', () => {
+    expect(validateBookingType(VALID)).toMatchObject({
+      ok: true,
+      value: {
+        slot_capacity: 1,
+        available_days: [1, 2, 3, 4, 5, 6],
+        available_from: '09:00',
+        available_to: '18:00',
+      },
+    })
+  })
+
+  it('normalises availability', () => {
+    const result = validateBookingType({
+      ...VALID,
+      slot_capacity: 3,
+      available_days: [5, 1, 1],
+      available_from: '10:30',
+      available_to: '20:00:00',
+    })
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        slot_capacity: 3,
+        available_days: [1, 5],
+        available_from: '10:30',
+        available_to: '20:00',
+      },
+    })
+  })
+
+  it('allows an unlimited slot', () => {
+    const result = validateBookingType({ ...VALID, slot_capacity: null })
+    expect(result).toMatchObject({ ok: true, value: { slot_capacity: null } })
+  })
+
   it('allows reminders to be turned off', () => {
     const result = validateBookingType({ ...VALID, remind_minutes_before: null })
     expect(result).toMatchObject({ ok: true, value: { remind_minutes_before: null } })
@@ -86,6 +122,12 @@ describe('validateBookingType', () => {
     ['a negative reminder', { remind_minutes_before: -5 }],
     ['long instructions', { instructions: 'x'.repeat(1001) }],
     ['a bad assignee id', { assignee_user_id: 'not-a-uuid' }],
+    ['a zero capacity', { slot_capacity: 0 }],
+    ['no working days for a timed type', { available_days: [] }],
+    ['an unknown weekday', { available_days: [8] }],
+    ['a bad opening time', { available_from: '25:00' }],
+    ['closing before opening', { available_from: '18:00', available_to: '09:00' }],
+    ['hours shorter than a booking', { available_from: '09:00', available_to: '10:00' }],
     ['fields that are not a list', { fields: 'name' }],
     ['a field with no label', { fields: [{ label: ' ' }] }],
     ['an unknown contact mapping', { fields: [{ label: 'x', maps_to: 'password' }] }],

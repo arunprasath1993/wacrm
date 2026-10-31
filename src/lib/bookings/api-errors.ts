@@ -8,6 +8,9 @@ export function bookingWriteError(error: { code?: string; message: string }) {
   if (error.code === '23505') {
     return NextResponse.json({ error: t('bookings.alreadyOpen') }, { status: 409 })
   }
+  if (error.code === '23P01') {
+    return NextResponse.json({ error: t('bookings.slotTaken') }, { status: 409 })
+  }
   if (error.code === '23514') {
     return NextResponse.json({ error: t('bookings.notInAccount') }, { status: 400 })
   }

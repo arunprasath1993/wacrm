@@ -2315,7 +2315,14 @@
       "active": "Active",
       "activeDesc": "Inactive types stay on existing bookings but the AI stops offering them.",
       "save": "Save",
-      "saveFailed": "Could not save"
+      "saveFailed": "Could not save",
+      "availableDays": "Working days and hours",
+      "availabilityDesc": "The AI only confirms times inside these hours that are still free.",
+      "availableFrom": "From",
+      "availableTo": "To",
+      "slotCapacity": "Bookings at the same time",
+      "slotLimited": "Limit bookings at the same time",
+      "slotCapacityDesc": "For example 1 presenter, or 3 installation crews. Turn off for no limit."
     }
   },
   "SignupPage": {
@@ -3052,7 +3059,10 @@
       "fieldsMustBeObject": "Fields must be an object",
       "alreadyOpen": "This contact already has an open booking of this type",
       "notInAccount": "That person or record is not in this account",
-      "typeAndContactRequired": "Booking type and contact are required"
+      "typeAndContactRequired": "Booking type and contact are required",
+      "capacityInvalid": "Bookings per slot must be a whole number from 1 to 1000",
+      "availabilityInvalid": "Choose at least one day, and hours long enough to fit a booking",
+      "slotTaken": "That time slot is already full"
     }
   },
   "Apps": {

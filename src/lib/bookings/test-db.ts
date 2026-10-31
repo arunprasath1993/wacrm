@@ -70,6 +70,10 @@ export function createFakeDb(seed: Record<string, Row[]> = {}): FakeDb {
         filters.push((row) => row[column] != null && String(row[column]) <= value)
         return builder
       },
+      gte: (column: string, value: string) => {
+        filters.push((row) => row[column] != null && String(row[column]) >= value)
+        return builder
+      },
       gt: (column: string, value: string) => {
         filters.push((row) => row[column] != null && String(row[column]) > value)
         return builder

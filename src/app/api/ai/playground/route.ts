@@ -8,6 +8,7 @@ import { buildSystemPrompt } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
 import { AiError, type ChatMessage } from '@/lib/ai/types'
 import { loadBookingContext } from '@/lib/bookings/load'
+import { loadAvailability } from '@/lib/bookings/slots'
 import { getT } from '@/lib/i18n/translate'
 
 const t = getT('Api')
@@ -83,6 +84,9 @@ export async function POST(request: Request) {
       latestUserMessage(messages),
     )
     const { types: bookingTypes, timeZone } = await loadBookingContext(supabase, accountId)
+    const availability = timeZone
+      ? await loadAvailability(supabase, accountId, bookingTypes, timeZone)
+      : {}
 
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
@@ -91,6 +95,7 @@ export async function POST(request: Request) {
       now: new Date(),
       timeZone,
       bookingTypes,
+      availability,
     })
 
     const { text, handoff, booking, bookingMalformed } = await generateReply({

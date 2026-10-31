@@ -56,6 +56,8 @@ function parseMarker(body: string): BookingMarker | null {
     fields: cleanFields(raw.fields),
     scheduledLocal: cleanString(raw.scheduled_local),
     scheduledText: cleanString(raw.scheduled_text),
+    onExisting:
+      raw.on_existing === 'update' || raw.on_existing === 'replace' ? raw.on_existing : null,
   }
 }
 

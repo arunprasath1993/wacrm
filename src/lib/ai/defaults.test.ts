@@ -13,6 +13,10 @@ const TYPE: BookingType = {
   assignee_user_id: null,
   handoff_on_confirm: false,
   remind_minutes_before: 60,
+  slot_capacity: 1,
+  available_days: [1, 2, 3, 4, 5, 6],
+  available_from: '09:00',
+  available_to: '18:00',
 }
 const NOW = new Date('2026-10-31T18:00:00.000Z')
 
@@ -32,6 +36,16 @@ describe('buildSystemPrompt — bookings', () => {
     })
     expect(prompt).toContain('[[BOOKING]]')
     expect(prompt).toContain('"installation"')
+  })
+
+  it('lists the free times it may offer', () => {
+    const prompt = buildSystemPrompt({
+      userPrompt: null,
+      mode: 'auto_reply',
+      bookingTypes: [TYPE],
+      availability: { installation: ['Mon, 2 Nov, 9:00 am'] },
+    })
+    expect(prompt).toContain('Mon, 2 Nov, 9:00 am')
   })
 
   it('never teaches the marker to an inbox draft', () => {

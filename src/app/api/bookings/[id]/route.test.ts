@@ -86,6 +86,11 @@ describe('PATCH /api/bookings/[id]', () => {
     expect((await PATCH(patch({ status: 'open' }), params())).status).toBe(409)
   })
 
+  it('reports a full slot as a conflict', async () => {
+    h.result = { data: null, error: { code: '23P01', message: 'booking slot is full' } }
+    expect((await PATCH(patch({ status: 'open' }), params())).status).toBe(409)
+  })
+
   it('reports an assignee from another account as a bad request', async () => {
     h.result = { data: null, error: { code: '23514', message: 'guard' } }
     const res = await PATCH(patch({ assigned_to: ID }), params())

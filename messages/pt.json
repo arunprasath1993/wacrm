@@ -2315,7 +2315,14 @@
       "active": "Ativo",
       "activeDesc": "Tipos inativos permanecem nos agendamentos existentes, mas a IA deixa de oferecê-los.",
       "save": "Salvar",
-      "saveFailed": "Não foi possível salvar"
+      "saveFailed": "Não foi possível salvar",
+      "availableDays": "Dias e horário de trabalho",
+      "availabilityDesc": "A IA só confirma horários dentro deste período que ainda estejam livres.",
+      "availableFrom": "De",
+      "availableTo": "Até",
+      "slotCapacity": "Agendamentos ao mesmo tempo",
+      "slotLimited": "Limitar agendamentos ao mesmo tempo",
+      "slotCapacityDesc": "Por exemplo, 1 apresentador ou 3 equipes de instalação. Desative para não ter limite."
     }
   },
   "SignupPage": {
@@ -3052,7 +3059,10 @@
       "fieldsMustBeObject": "Os campos devem ser um objeto",
       "alreadyOpen": "Este contato já tem um agendamento aberto deste tipo",
       "notInAccount": "Essa pessoa ou registro não pertence a esta conta",
-      "typeAndContactRequired": "O tipo de agendamento e o contato são obrigatórios"
+      "typeAndContactRequired": "O tipo de agendamento e o contato são obrigatórios",
+      "capacityInvalid": "Os agendamentos por horário devem ser um número inteiro de 1 a 1000",
+      "availabilityInvalid": "Escolha pelo menos um dia e um horário em que caiba um agendamento",
+      "slotTaken": "Esse horário já está lotado"
     }
   },
   "Apps": {
