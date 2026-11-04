@@ -1,7 +1,7 @@
 import { NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
-import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
+import { getMediaUrl } from '@/lib/whatsapp/meta-api'
 import { mirrorInboundMedia } from '@/lib/whatsapp/mirror-inbound-media'
 import { normalizePhone } from '@/lib/whatsapp/phone-utils'
 import {
@@ -33,6 +33,13 @@ import {
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
+import {
+  inboundLogEnabled,
+  outcomeRow,
+  recordInboundLog,
+  summarizeWebhook,
+  type InboundOutcome,
+} from '@/lib/whatsapp/webhook-inbound-log'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -243,6 +250,9 @@ export async function POST(request: Request) {
     // loudly if a misconfiguration causes signatures to stop matching,
     // rather than silently eating events.
     console.warn('[webhook] rejected request with invalid signature')
+    if (inboundLogEnabled()) {
+      after(() => recordInboundLog(supabaseAdmin(), summarizeWebhook(safeJson(rawBody), false)))
+    }
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
 
@@ -268,10 +278,18 @@ export async function POST(request: Request) {
   // keeps the function alive until it resolves (within the route's
   // maxDuration).
   after(async () => {
+    if (inboundLogEnabled()) {
+      await recordInboundLog(supabaseAdmin(), summarizeWebhook(body, true))
+    }
     try {
       await processWebhook(body)
     } catch (error) {
       console.error('Error processing webhook:', error)
+      if (inboundLogEnabled()) {
+        await recordInboundLog(supabaseAdmin(), [
+          outcomeRow({ phoneNumberId: null, outcome: 'process_error', detail: String(error) }),
+        ])
+      }
     }
   })
 
@@ -298,6 +316,33 @@ async function resolveAccountForPhoneNumber(
     return null
   }
   return data[0].account_id
+}
+
+function safeJson(raw: string): unknown {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+/** Writes one message's outcome when WEBHOOK_DEBUG_LOG is on. */
+async function logOutcome(
+  phoneNumberId: string | null,
+  message: { id?: string; type?: string } | null,
+  outcome: InboundOutcome,
+  detail?: string
+) {
+  if (!inboundLogEnabled()) return
+  await recordInboundLog(supabaseAdmin(), [
+    outcomeRow({
+      phoneNumberId,
+      messageId: message?.id,
+      messageType: message?.type,
+      outcome,
+      detail,
+    }),
+  ])
 }
 
 function metaTimestampToIso(timestamp: string): string | null {
@@ -363,11 +408,13 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           phoneNumberId,
           configError
         )
+        await logOutcome(phoneNumberId, null, 'config_error', configError.message)
         continue
       }
 
       if (!configRows || configRows.length === 0) {
         console.error('No config found for phone_number_id:', phoneNumberId)
+        await logOutcome(phoneNumberId, null, 'no_config')
         continue
       }
 
@@ -379,18 +426,25 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           'Account owners:',
           configRows.map((r: { account_id: string; user_id: string }) => `${r.account_id} (admin ${r.user_id})`)
         )
+        await logOutcome(phoneNumberId, null, 'multiple_configs', String(configRows.length))
         continue
       }
 
       const config = configRows[0]
 
-      const decryptedAccessToken = decrypt(config.access_token)
+      let decryptedAccessToken: string
+      try {
+        decryptedAccessToken = decrypt(config.access_token)
+      } catch (error) {
+        await logOutcome(phoneNumberId, null, 'token_undecryptable')
+        throw error
+      }
 
       for (let i = 0; i < value.messages.length; i++) {
         const message = value.messages[i]
         const contact = value.contacts[i] || value.contacts[0]
 
-        await processMessage(
+        const result = await processMessage(
           message,
           contact,
           // Tenancy — drives every contact / conversation lookup
@@ -406,6 +460,7 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           // and losing attachments is the failure mode worth avoiding.
           config.mirror_inbound_media !== false
         )
+        await logOutcome(phoneNumberId, message, result.outcome, result.detail)
       }
     }
   }
@@ -592,7 +647,7 @@ async function processMessage(
   // Per-account opt-out for the inbound-media mirror (migration 039).
   // See parseMessageContent for what it turns off.
   mirrorMedia: boolean
-) {
+): Promise<{ outcome: InboundOutcome; detail?: string }> {
   // Phone number OR business-scoped user ID — Meta sends only the
   // latter for a sender who has adopted a WhatsApp username (#519).
   const identity = resolveInboundIdentity(message, contact)
@@ -604,7 +659,7 @@ async function processMessage(
       '[webhook] inbound message carries neither a phone number nor a BSUID; skipping:',
       message.id
     )
-    return
+    return { outcome: 'no_identity' }
   }
 
   // Find or create contact
@@ -613,7 +668,7 @@ async function processMessage(
     configOwnerUserId,
     identity
   )
-  if (!contactOutcome) return
+  if (!contactOutcome) return { outcome: 'contact_failed' }
   const contactRecord = contactOutcome.contact
 
   // Find or create conversation
@@ -622,7 +677,7 @@ async function processMessage(
     configOwnerUserId,
     contactRecord.id
   )
-  if (!convResult) return
+  if (!convResult) return { outcome: 'conversation_failed' }
   const conversation = convResult.conversation
 
   // Emit conversation.created as soon as the thread is opened — BEFORE
@@ -641,7 +696,7 @@ async function processMessage(
   // Done before parseMessageContent so the media-URL fetch is skipped.
   if (message.type === 'reaction') {
     await handleReaction(message, conversation.id, contactRecord.id)
-    return
+    return { outcome: 'reaction' }
   }
 
   // Parse message content based on type
@@ -730,7 +785,7 @@ async function processMessage(
 
   if (msgError) {
     console.error('Error inserting message:', msgError)
-    return
+    return { outcome: 'insert_failed', detail: msgError.message }
   }
 
   // Replayed delivery: the message already exists, so acknowledge it as a
@@ -742,7 +797,7 @@ async function processMessage(
       '[webhook] duplicate inbound message ignored (idempotent replay):',
       message.id
     )
-    return
+    return { outcome: 'duplicate' }
   }
 
   const isFirstInboundMessage = await claimFirstInboundMessage(
@@ -938,6 +993,8 @@ async function processMessage(
     content_type: contentType,
     text: contentText,
   })
+
+  return { outcome: 'inserted' }
 }
 
 async function parseMessageContent(
