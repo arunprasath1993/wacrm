@@ -3142,7 +3142,7 @@
       "nothingToUpdate": "Nada para atualizar — altere um campo ou escolha uma nova foto.",
       "notConnected": "Conecte um número do WhatsApp antes de editar o perfil comercial.",
       "tokenCorrupted": "Não é possível descriptografar o token de acesso salvo. Redefina e salve novamente a configuração do WhatsApp.",
-      "metaAppIdRequired": "META_APP_ID não está definido no servidor. É necessário para enviar uma foto de perfil."
+      "metaAppIdRequired": "Não foi possível encontrar o app da Meta deste token de acesso, necessário para enviar uma foto de perfil. Defina META_APP_ID no servidor com o id do seu app da Meta (Meta for Developers → Configurações do app → Básico)."
     }
   },
   "Apps": {

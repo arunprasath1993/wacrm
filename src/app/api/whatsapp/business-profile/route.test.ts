@@ -5,6 +5,7 @@ let callerIsAdmin = true
 const getBusinessProfile = vi.fn()
 const updateBusinessProfile = vi.fn()
 const uploadResumableMedia = vi.fn()
+const resolveMetaAppId = vi.fn()
 
 vi.mock('@/lib/auth/account', async () => {
   const actual = await vi.importActual<typeof import('@/lib/auth/account')>('@/lib/auth/account')
@@ -33,7 +34,12 @@ vi.mock('@/lib/auth/account', async () => {
   }
 })
 
-vi.mock('@/lib/whatsapp/encryption', () => ({ decrypt: (v: string) => `plain:${v}` }))
+vi.mock('@/lib/whatsapp/encryption', () => ({
+  decrypt: (v: string) => {
+    if (v === 'bad') throw new Error('bad key')
+    return `plain:${v}`
+  },
+}))
 vi.mock('@/lib/whatsapp/meta-api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/whatsapp/meta-api')>('@/lib/whatsapp/meta-api')
   return {
@@ -41,6 +47,7 @@ vi.mock('@/lib/whatsapp/meta-api', async () => {
     getBusinessProfile: (args: unknown) => getBusinessProfile(args),
     updateBusinessProfile: (args: unknown) => updateBusinessProfile(args),
     uploadResumableMedia: (args: unknown) => uploadResumableMedia(args),
+    resolveMetaAppId: (token: string) => resolveMetaAppId(token),
   }
 })
 
@@ -63,7 +70,7 @@ beforeEach(() => {
   getBusinessProfile.mockReset().mockResolvedValue({ about: 'Open 9-6' })
   updateBusinessProfile.mockReset().mockResolvedValue(undefined)
   uploadResumableMedia.mockReset().mockResolvedValue({ handle: 'h-1' })
-  process.env.META_APP_ID = 'app-1'
+  resolveMetaAppId.mockReset().mockResolvedValue('app-1')
   vi.spyOn(console, 'error').mockImplementation(() => {})
 })
 
@@ -100,6 +107,14 @@ describe('GET /api/whatsapp/business-profile', () => {
     const res = await GET()
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ state: 'unavailable', message: expect.stringMatching(/expired/) })
+  })
+
+  it('reports a token that cannot be decrypted without calling Meta', async () => {
+    storedConfig = { ...CONNECTED, access_token: 'bad' }
+    const res = await GET()
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ state: 'unavailable', message: expect.stringMatching(/decrypt/i) })
+    expect(getBusinessProfile).not.toHaveBeenCalled()
   })
 })
 
@@ -152,11 +167,20 @@ describe('POST /api/whatsapp/business-profile', () => {
     expect(res.status).toBe(400)
   })
 
-  it('needs META_APP_ID for a photo', async () => {
-    delete process.env.META_APP_ID
+  it('resolves the app id from the token only when a photo is sent', async () => {
+    await post({ fields: { about: 'x' } })
+    expect(resolveMetaAppId).not.toHaveBeenCalled()
+    await post({ photo: new Blob([JPEG], { type: 'image/jpeg' }) })
+    expect(resolveMetaAppId).toHaveBeenCalledWith('plain:enc')
+  })
+
+  it('answers 500 with a META_APP_ID hint when the app id cannot be found', async () => {
+    resolveMetaAppId.mockResolvedValue(null)
     const res = await post({ photo: new Blob([JPEG], { type: 'image/jpeg' }) })
     expect(res.status).toBe(500)
+    expect((await res.json()).error).toMatch(/META_APP_ID/)
     expect(uploadResumableMedia).not.toHaveBeenCalled()
+    expect(updateBusinessProfile).not.toHaveBeenCalled()
   })
 
   it('answers 409 when no number is connected', async () => {

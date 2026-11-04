@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getBusinessProfile, MetaApiError, updateBusinessProfile } from './meta-api'
+import {
+  getBusinessProfile,
+  MetaApiError,
+  resolveMetaAppId,
+  updateBusinessProfile,
+} from './meta-api'
 
 const fetchMock = vi.fn()
 
@@ -9,6 +14,49 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
+
+describe('resolveMetaAppId', () => {
+  it('uses META_APP_ID without calling Meta when it is set', async () => {
+    vi.stubEnv('META_APP_ID', ' app-env ')
+    expect(await resolveMetaAppId('tok')).toBe('app-env')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('asks GET /app for the token app when META_APP_ID is unset', async () => {
+    vi.stubEnv('META_APP_ID', '')
+    fetchMock.mockResolvedValue(Response.json({ id: '1234567890' }))
+    expect(await resolveMetaAppId('tok')).toBe('1234567890')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/app\?fields=id$/)
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok' })
+  })
+
+  it('falls back to debug_token when GET /app fails', async () => {
+    vi.stubEnv('META_APP_ID', '')
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ error: { message: 'nope' } }, { status: 400 }))
+      .mockResolvedValueOnce(Response.json({ data: { app_id: '555', is_valid: true } }))
+    expect(await resolveMetaAppId('tok')).toBe('555')
+    expect(fetchMock.mock.calls[1][0]).toMatch(/\/debug_token\?input_token=tok$/)
+  })
+
+  it('falls back to debug_token when GET /app throws', async () => {
+    vi.stubEnv('META_APP_ID', '')
+    fetchMock
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce(Response.json({ data: { app_id: '555' } }))
+    expect(await resolveMetaAppId('tok')).toBe('555')
+  })
+
+  it('returns null when neither lookup yields an id', async () => {
+    vi.stubEnv('META_APP_ID', '')
+    fetchMock
+      .mockResolvedValueOnce(Response.json({}))
+      .mockResolvedValueOnce(Response.json({ error: { message: 'bad token' } }, { status: 400 }))
+    expect(await resolveMetaAppId('tok')).toBeNull()
+  })
 })
 
 describe('getBusinessProfile', () => {

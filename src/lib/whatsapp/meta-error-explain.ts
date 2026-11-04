@@ -75,7 +75,7 @@ const STEP_LABEL: Record<MetaConnectStep, string> = {
   register: 'registering the phone number',
   subscribe_waba: 'subscribing the WhatsApp Business Account to the app',
   subscribed_apps: 'reading the WhatsApp Business Account subscriptions',
-  business_profile: 'updating the WhatsApp Business Profile',
+  business_profile: 'reading or updating the WhatsApp Business Profile',
   profile_photo_upload: 'uploading the profile photo',
 }
 
@@ -211,6 +211,16 @@ export function explainMetaError(
         err.message,
       ))
   if (looksLikeMissingObject) {
+    // The photo upload is POST /{META_APP_ID}/uploads — app-scoped, so the
+    // missing object is the app, not the phone number.
+    if (step === 'profile_photo_upload') {
+      return build(
+        'Meta cannot find the app in META_APP_ID, or the access token was not generated for that app. ' +
+          'Check that META_APP_ID matches the Meta app the System User token belongs to.',
+        null,
+        'user',
+      )
+    }
     return build(
       `Meta cannot find ${withId(target.noun, target.id)}, or the business that owns the access token ` +
         `does not own it. Copy the ${target.noun} exactly from Meta → WhatsApp → API Setup and check the ` +

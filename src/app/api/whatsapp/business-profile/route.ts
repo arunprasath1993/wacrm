@@ -4,6 +4,7 @@ import { decrypt } from '@/lib/whatsapp/encryption'
 import {
   getBusinessProfile,
   updateBusinessProfile,
+  resolveMetaAppId,
   uploadResumableMedia,
 } from '@/lib/whatsapp/meta-api'
 import {
@@ -68,10 +69,17 @@ export async function GET() {
     const config = await loadConnectedNumber(supabase, accountId)
     if (!config) return NextResponse.json({ state: 'disconnected' })
 
+    let accessToken: string
+    try {
+      accessToken = decrypt(config.access_token)
+    } catch {
+      return NextResponse.json({ state: 'unavailable', message: t('tokenCorrupted') })
+    }
+
     try {
       const meta = await getBusinessProfile({
         phoneNumberId: config.phone_number_id,
-        accessToken: decrypt(config.access_token),
+        accessToken,
       })
       return NextResponse.json({ state: 'connected', profile: toBusinessProfile(meta) })
     } catch (err) {
@@ -149,7 +157,7 @@ export async function POST(request: Request) {
 
     // The Resumable Upload API is app-scoped — same requirement as
     // template media headers.
-    const appId = process.env.META_APP_ID
+    const appId = photo ? await resolveMetaAppId(accessToken) : null
     if (photo && !appId) {
       return NextResponse.json({ error: t('metaAppIdRequired') }, { status: 500 })
     }

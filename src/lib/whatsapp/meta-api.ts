@@ -671,6 +671,40 @@ export async function sendTemplateMessage(
 //
 // See https://developers.facebook.com/docs/graph-api/guides/upload
 
+/**
+ * The Meta app id the Resumable Upload API is keyed on. META_APP_ID wins
+ * when set; otherwise ask Meta which app the access token was issued
+ * for, so photo and template-header uploads work on deployments that
+ * never set it (and can't drift from the token's app). Returns null when
+ * neither works.
+ */
+export async function resolveMetaAppId(accessToken: string): Promise<string | null> {
+  const fromEnv = process.env.META_APP_ID?.trim()
+  if (fromEnv) return fromEnv
+
+  const headers = { Authorization: `Bearer ${accessToken}` }
+  // GET /app answers for the token's own app. debug_token is the
+  // documented fallback and carries the same id as `data.app_id`.
+  const lookups: [string, (body: unknown) => unknown][] = [
+    [`${META_API_BASE}/app?fields=id`, (b) => (b as { id?: unknown })?.id],
+    [
+      `${META_API_BASE}/debug_token?${new URLSearchParams({ input_token: accessToken })}`,
+      (b) => (b as { data?: { app_id?: unknown } })?.data?.app_id,
+    ],
+  ]
+  for (const [url, pick] of lookups) {
+    try {
+      const res = await fetch(url, { headers })
+      if (!res.ok) continue
+      const id = pick(await res.json())
+      if (typeof id === 'string' && id) return id
+    } catch {
+      // network failure — try the next lookup
+    }
+  }
+  return null
+}
+
 export interface UploadResumableMediaArgs {
   /** Meta App id (env META_APP_ID) — resumable upload is app-scoped. */
   appId: string

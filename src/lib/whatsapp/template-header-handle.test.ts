@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Stub the Meta resumable upload so the helper is tested in isolation.
 vi.mock('./meta-api', () => ({
   uploadResumableMedia: vi.fn(async () => ({ handle: 'HANDLE123' })),
+  // Env-only here; the token lookup is covered in meta-api.business-profile.test.ts.
+  resolveMetaAppId: vi.fn(async () => process.env.META_APP_ID || null),
 }));
 
 // The SSRF guard does a real DNS lookup, so stub it — the fixtures below use

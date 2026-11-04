@@ -218,3 +218,45 @@ describe("metaErrorPayload", () => {
     });
   });
 });
+
+describe("explainMetaError — business profile", () => {
+  const missing = "Unsupported post request. Object with ID 'app-1' does not exist";
+
+  it("blames META_APP_ID, not the phone number, when the photo upload hits a missing object", () => {
+    const x = explainMetaError(
+      metaErr({ code: 100, subcode: 33, message: missing }),
+      "profile_photo_upload",
+      { phoneNumberId: "pn-1" },
+    );
+    expect(x.field).toBeNull();
+    expect(x.side).toBe("user");
+    expect(x.summary).toMatch(/META_APP_ID/);
+    expect(x.summary).not.toMatch(/Phone Number ID/);
+  });
+
+  it("still blames the Phone Number ID for a missing object on the profile endpoint", () => {
+    const x = explainMetaError(
+      metaErr({ code: 100, message: missing }),
+      "business_profile",
+      { phoneNumberId: "pn-1" },
+    );
+    expect(x.field).toBe("phone_number_id");
+    expect(x.summary).toMatch(/cannot find Phone Number ID pn-1/);
+  });
+
+  it("keeps Meta's wording for a rejected profile field", () => {
+    const x = explainMetaError(
+      metaErr({ code: 100, message: "(#100) Param about must be at most 139 characters" }),
+      "business_profile",
+    );
+    expect(x.field).toBeNull();
+    expect(x.httpStatus).toBe(400);
+    expect(x.summary).toMatch(/Meta rejected the profile update: \(#100\) Param about/);
+    expect(x.summary).not.toMatch(/digits only/);
+  });
+
+  it("describes the step as reading or updating the profile", () => {
+    const x = explainMetaError(new Error("socket hang up"), "business_profile");
+    expect(x.summary).toMatch(/while reading or updating the WhatsApp Business Profile/);
+  });
+});

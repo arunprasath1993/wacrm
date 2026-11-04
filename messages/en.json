@@ -3142,7 +3142,7 @@
       "nothingToUpdate": "Nothing to update — change a field or pick a new photo.",
       "notConnected": "Connect a WhatsApp number before editing its business profile.",
       "tokenCorrupted": "The stored access token cannot be decrypted. Reset and re-save the WhatsApp configuration.",
-      "metaAppIdRequired": "META_APP_ID is not set on the server. It is required to upload a profile photo."
+      "metaAppIdRequired": "Could not find the Meta app for this access token, which is needed to upload a profile photo. Set META_APP_ID on the server to your Meta app id (Meta for Developers → App settings → Basic)."
     }
   },
   "Apps": {

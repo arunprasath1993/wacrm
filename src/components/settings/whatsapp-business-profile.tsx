@@ -41,9 +41,9 @@ type LoadState =
   | { kind: 'unavailable'; message: string }
   | { kind: 'ready'; profile: BusinessProfile };
 
-type Form = Omit<BusinessProfileFields, 'websites'> & { website1: string; website2: string };
+export type Form = Omit<BusinessProfileFields, 'websites'> & { website1: string; website2: string };
 
-function toForm(p: BusinessProfile): Form {
+export function toForm(p: BusinessProfile): Form {
   return {
     about: p.about,
     address: p.address,
@@ -56,10 +56,10 @@ function toForm(p: BusinessProfile): Form {
 }
 
 /** Only the fields the user changed — Meta leaves the rest untouched. */
-function changedFields(form: Form, saved: BusinessProfile): Partial<BusinessProfileFields> {
+export function changedFields(form: Form, saved: BusinessProfile): Partial<BusinessProfileFields> {
   const out: Partial<BusinessProfileFields> = {};
   for (const key of ['about', 'address', 'description', 'email'] as const) {
-    if (form[key].trim() !== saved[key]) out[key] = form[key].trim();
+    if (form[key].trim() !== saved[key].trim()) out[key] = form[key].trim();
   }
   if (form.vertical && form.vertical !== saved.vertical) out.vertical = form.vertical;
   const websites = [form.website1, form.website2].map((w) => w.trim()).filter(Boolean);

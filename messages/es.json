@@ -3142,7 +3142,7 @@
       "nothingToUpdate": "Nada que actualizar: cambia un campo o elige una foto nueva.",
       "notConnected": "Conecta un número de WhatsApp antes de editar su perfil de empresa.",
       "tokenCorrupted": "No se puede descifrar el token de acceso guardado. Restablece y vuelve a guardar la configuración de WhatsApp.",
-      "metaAppIdRequired": "META_APP_ID no está configurado en el servidor. Es necesario para subir una foto de perfil."
+      "metaAppIdRequired": "No se encontró la app de Meta de este token de acceso, necesaria para subir una foto de perfil. Configura META_APP_ID en el servidor con el id de tu app de Meta (Meta for Developers → Configuración de la app → Básica)."
     }
   },
   "Apps": {

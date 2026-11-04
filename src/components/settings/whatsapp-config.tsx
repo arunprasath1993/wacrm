@@ -977,7 +977,7 @@ export function WhatsAppConfig() {
 
         {/* What customers see in the chat info — has its own Save and
             goes straight to Meta, separate from the credentials above. */}
-        {config && <WhatsAppBusinessProfile />}
+        {config && <WhatsAppBusinessProfile key={config.phone_number_id} />}
       </div>
 
       {/* Setup Instructions Sidebar */}
