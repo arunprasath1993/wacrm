@@ -21,6 +21,8 @@ export type MetaConnectStep =
   | 'register'
   | 'subscribe_waba'
   | 'subscribed_apps'
+  | 'business_profile'
+  | 'profile_photo_upload'
 
 /** The settings-form field (or external place) the user should look at. */
 export type MetaErrorField =
@@ -73,6 +75,8 @@ const STEP_LABEL: Record<MetaConnectStep, string> = {
   register: 'registering the phone number',
   subscribe_waba: 'subscribing the WhatsApp Business Account to the app',
   subscribed_apps: 'reading the WhatsApp Business Account subscriptions',
+  business_profile: 'updating the WhatsApp Business Profile',
+  profile_photo_upload: 'uploading the profile photo',
 }
 
 const TOKEN_HINT =
@@ -97,7 +101,12 @@ function objectForStep(
   step: MetaConnectStep,
   ctx: MetaErrorContext,
 ): { field: MetaErrorField; noun: string; id: string | null } {
-  if (step === 'verify_number' || step === 'register') {
+  if (
+    step === 'verify_number' ||
+    step === 'register' ||
+    step === 'business_profile' ||
+    step === 'profile_photo_upload'
+  ) {
     return { field: 'phone_number_id', noun: 'Phone Number ID', id: ctx.phoneNumberId ?? null }
   }
   return { field: 'waba_id', noun: 'WhatsApp Business Account ID', id: ctx.wabaId ?? null }
@@ -212,6 +221,11 @@ export function explainMetaError(
   }
 
   if (code === 100) {
+    // A profile field Meta didn't like — its message names the field,
+    // so the "check the id" advice below would only mislead.
+    if (step === 'business_profile' || step === 'profile_photo_upload') {
+      return build(`Meta rejected the profile update: ${metaMessage}.`, null, 'user')
+    }
     if (step === 'register' && /pin/i.test(err.message)) {
       return build(
         `Meta rejected the two-step verification PIN: ${err.message}. Enter the 6-digit PIN set in ` +

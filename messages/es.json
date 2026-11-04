@@ -1983,7 +1983,64 @@
       "phoneNumberIdNotNumeric": "El Phone Number ID debe contener solo dígitos. Copia el id numérico desde Meta → WhatsApp → Configuración de la API, no el número de teléfono en sí.",
       "wabaIdNotNumeric": "El ID de la cuenta de WhatsApp Business debe contener solo dígitos. Cópialo desde Meta → WhatsApp → Configuración de la API.",
       "wabaSubscribed": "La cuenta de WhatsApp Business está suscrita a esta app: los webhooks entrantes pueden entregarse.",
-      "wabaNotSubscribed": "La cuenta de WhatsApp Business no está suscrita a esta app, así que Meta no entregará webhooks entrantes. Vuelve a ingresar el token de acceso y guarda de nuevo para suscribirla."
+      "wabaNotSubscribed": "La cuenta de WhatsApp Business no está suscrita a esta app, así que Meta no entregará webhooks entrantes. Vuelve a ingresar el token de acceso y guarda de nuevo para suscribirla.",
+      "businessProfile": {
+        "title": "Perfil de WhatsApp Business",
+        "description": "Lo que ven los clientes al abrir la información de tu chat en WhatsApp. Al guardar aquí se actualiza el perfil directamente en Meta.",
+        "loading": "Cargando perfil de empresa…",
+        "loadFailed": "No se pudo cargar el perfil de empresa desde Meta.",
+        "retry": "Reintentar",
+        "photoAlt": "Foto del perfil de empresa",
+        "changePhoto": "Cambiar foto",
+        "uploadPhoto": "Subir foto",
+        "photoHint": "JPEG o PNG, hasta 5 MB. Un cuadrado de 640×640 se ve mejor.",
+        "photoWrongType": "La foto de perfil debe ser una imagen JPEG o PNG.",
+        "photoTooLarge": "La foto de perfil debe pesar 5 MB o menos.",
+        "about": "Info",
+        "aboutPlaceholder": "p. ej. Abierto de 9 a 18 h, lun–sáb",
+        "aboutHint": "Se muestra debajo del nombre de tu empresa en tu perfil de WhatsApp.",
+        "aboutRequired": "La info no puede estar vacía.",
+        "category": "Categoría",
+        "categoryPlaceholder": "Elige una categoría",
+        "descriptionLabel": "Descripción",
+        "descriptionPlaceholder": "Cuenta a tus clientes a qué se dedica tu empresa",
+        "address": "Dirección",
+        "email": "Correo electrónico",
+        "websites": "Sitios web",
+        "website1": "Sitio web 1",
+        "website2": "Sitio web 2",
+        "displayNameNote": "El nombre visible se cambia en WhatsApp Manager de Meta y requiere su aprobación; no se puede editar aquí.",
+        "propagationNote": "Los clientes pueden tardar unos minutos en ver la nueva foto o info en sus teléfonos.",
+        "adminOnly": "Solo los administradores pueden cambiar el perfil de empresa.",
+        "save": "Guardar perfil de empresa",
+        "saving": "Guardando…",
+        "saved": "Perfil de empresa actualizado",
+        "savedDesc": "Meta aceptó los cambios.",
+        "saveFailed": "No se pudo actualizar el perfil de empresa",
+        "verticals": {
+          "OTHER": "Otro",
+          "ALCOHOL": "Bebidas alcohólicas",
+          "APPAREL": "Ropa y accesorios",
+          "AUTO": "Automoción",
+          "BEAUTY": "Belleza, spa y salón",
+          "EDU": "Educación",
+          "ENTERTAIN": "Entretenimiento",
+          "EVENT_PLAN": "Organización de eventos",
+          "FINANCE": "Finanzas y banca",
+          "GOVT": "Servicio público",
+          "GROCERY": "Alimentación y supermercado",
+          "HEALTH": "Medicina y salud",
+          "HOTEL": "Hotel y alojamiento",
+          "NONPROFIT": "Sin ánimo de lucro",
+          "ONLINE_GAMBLING": "Juegos y apuestas en línea",
+          "OTC_DRUGS": "Medicamentos sin receta",
+          "PHYSICAL_GAMBLING": "Juegos y apuestas presenciales",
+          "PROF_SERVICES": "Servicios profesionales",
+          "RESTAURANT": "Restaurante",
+          "RETAIL": "Compras y comercio",
+          "TRAVEL": "Viajes y transporte"
+        }
+      }
     },
     "sections": {
       "overview": "Resumen",
@@ -2832,6 +2889,20 @@
       "bodyTooLong": "El bodyText interactivo supera los {max} caracteres.",
       "headerTooLong": "El headerText interactivo supera los {max} caracteres.",
       "footerTooLong": "El footerText interactivo supera los {max} caracteres."
+    },
+    "businessProfile": {
+      "invalidBody": "La actualización del perfil debe ser un objeto de campos.",
+      "notText": "{field} debe ser texto.",
+      "tooLong": "{field} debe tener {max} caracteres o menos.",
+      "aboutRequired": "La info no puede estar vacía.",
+      "invalidEmail": "Introduce un correo electrónico válido.",
+      "invalidWebsites": "Los sitios web deben ser una lista de URL.",
+      "tooManyWebsites": "Añade como máximo {max} sitios web.",
+      "invalidWebsite": "{url} no es un enlace http:// o https:// válido.",
+      "invalidVertical": "Elige una categoría de la lista.",
+      "photoEmpty": "La foto de perfil está vacía.",
+      "photoTooLarge": "La foto de perfil debe pesar {max} MB o menos.",
+      "photoWrongType": "La foto de perfil debe ser una imagen JPEG o PNG."
     }
   },
   "Api": {
@@ -3064,6 +3135,14 @@
       "capacityInvalid": "Las reservas por horario deben ser un número entero de 1 a 1000",
       "availabilityInvalid": "Elige al menos un día y un horario donde quepa una reserva",
       "slotTaken": "Ese horario ya está completo"
+    },
+    "businessProfile": {
+      "invalidBody": "Envía el perfil como multipart form data con una parte JSON \"fields\" y un archivo \"photo\" opcional.",
+      "photoTooLarge": "La foto de perfil debe pesar {max} MB o menos.",
+      "nothingToUpdate": "Nada que actualizar: cambia un campo o elige una foto nueva.",
+      "notConnected": "Conecta un número de WhatsApp antes de editar su perfil de empresa.",
+      "tokenCorrupted": "No se puede descifrar el token de acceso guardado. Restablece y vuelve a guardar la configuración de WhatsApp.",
+      "metaAppIdRequired": "META_APP_ID no está configurado en el servidor. Es necesario para subir una foto de perfil."
     }
   },
   "Apps": {

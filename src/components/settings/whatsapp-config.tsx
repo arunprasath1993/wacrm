@@ -25,6 +25,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { ProviderPicker } from "./provider-picker";
 import { SettingsPanelHead } from './settings-panel-head';
+import { WhatsAppBusinessProfile } from './whatsapp-business-profile';
 import {
   Accordion,
   AccordionItem,
@@ -973,6 +974,10 @@ export function WhatsAppConfig() {
             </Button>
           )}
         </div>
+
+        {/* What customers see in the chat info — has its own Save and
+            goes straight to Meta, separate from the credentials above. */}
+        {config && <WhatsAppBusinessProfile />}
       </div>
 
       {/* Setup Instructions Sidebar */}

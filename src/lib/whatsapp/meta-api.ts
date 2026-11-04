@@ -171,6 +171,58 @@ export async function getPhoneNumberHealth(
 }
 
 // ============================================================
+// Business profile (photo, About, description, ... customers see)
+// ============================================================
+
+import type { BusinessProfileUpdate, MetaBusinessProfile } from './business-profile'
+
+const BUSINESS_PROFILE_FIELDS =
+  'about,address,description,email,profile_picture_url,websites,vertical'
+
+/** Read the number's WhatsApp Business Profile. */
+export async function getBusinessProfile(
+  args: VerifyPhoneNumberArgs,
+): Promise<MetaBusinessProfile> {
+  const { phoneNumberId, accessToken } = args
+  const response = await fetch(
+    `${META_API_BASE}/${phoneNumberId}/whatsapp_business_profile?fields=${BUSINESS_PROFILE_FIELDS}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = (await response.json()) as { data?: MetaBusinessProfile[] }
+  return data.data?.[0] ?? {}
+}
+
+export interface UpdateBusinessProfileArgs {
+  phoneNumberId: string
+  accessToken: string
+  /** Only the keys present are changed on Meta's side. */
+  fields: BusinessProfileUpdate
+  /** Handle from `uploadResumableMedia` — sets the profile photo. */
+  profilePictureHandle?: string
+}
+
+/** Update the number's WhatsApp Business Profile. */
+export async function updateBusinessProfile(args: UpdateBusinessProfileArgs): Promise<void> {
+  const { phoneNumberId, accessToken, fields, profilePictureHandle } = args
+  const body: Record<string, unknown> = { messaging_product: 'whatsapp', ...fields }
+  if (profilePictureHandle) body.profile_picture_handle = profilePictureHandle
+  const response = await fetch(`${META_API_BASE}/${phoneNumberId}/whatsapp_business_profile`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+}
+
+// ============================================================
 // Cloud API registration (subscription for inbound webhooks)
 // ============================================================
 //
