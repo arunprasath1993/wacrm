@@ -1983,7 +1983,64 @@
       "phoneNumberIdNotNumeric": "O Phone Number ID deve conter apenas dígitos. Copie o id numérico em Meta → WhatsApp → Configuração da API, não o número de telefone em si.",
       "wabaIdNotNumeric": "O ID da conta do WhatsApp Business deve conter apenas dígitos. Copie-o em Meta → WhatsApp → Configuração da API.",
       "wabaSubscribed": "A conta do WhatsApp Business está inscrita neste app — os webhooks de entrada podem ser entregues.",
-      "wabaNotSubscribed": "A conta do WhatsApp Business não está inscrita neste app, então a Meta não entregará webhooks de entrada. Informe novamente o token de acesso e salve de novo para inscrevê-la."
+      "wabaNotSubscribed": "A conta do WhatsApp Business não está inscrita neste app, então a Meta não entregará webhooks de entrada. Informe novamente o token de acesso e salve de novo para inscrevê-la.",
+      "businessProfile": {
+        "title": "Perfil do WhatsApp Business",
+        "description": "O que os clientes veem ao abrir as informações da sua conversa no WhatsApp. Salvar aqui atualiza o perfil diretamente na Meta.",
+        "loading": "Carregando perfil comercial…",
+        "loadFailed": "Não foi possível carregar o perfil comercial da Meta.",
+        "retry": "Tentar novamente",
+        "photoAlt": "Foto do perfil comercial",
+        "changePhoto": "Trocar foto",
+        "uploadPhoto": "Enviar foto",
+        "photoHint": "JPEG ou PNG, até 5 MB. Um quadrado de 640×640 fica melhor.",
+        "photoWrongType": "A foto de perfil deve ser uma imagem JPEG ou PNG.",
+        "photoTooLarge": "A foto de perfil deve ter 5 MB ou menos.",
+        "about": "Recado",
+        "aboutPlaceholder": "ex.: Aberto das 9h às 18h, seg–sáb",
+        "aboutHint": "Aparece abaixo do nome da sua empresa no perfil do WhatsApp.",
+        "aboutRequired": "O recado não pode ficar vazio.",
+        "category": "Categoria",
+        "categoryPlaceholder": "Escolha uma categoria",
+        "descriptionLabel": "Descrição",
+        "descriptionPlaceholder": "Conte aos clientes o que sua empresa faz",
+        "address": "Endereço",
+        "email": "E-mail",
+        "websites": "Sites",
+        "website1": "Site 1",
+        "website2": "Site 2",
+        "displayNameNote": "O nome de exibição é alterado no WhatsApp Manager da Meta e precisa de aprovação da Meta — não pode ser editado aqui.",
+        "propagationNote": "Pode levar alguns minutos para os clientes verem a nova foto ou recado no celular.",
+        "adminOnly": "Somente administradores podem alterar o perfil comercial.",
+        "save": "Salvar perfil comercial",
+        "saving": "Salvando…",
+        "saved": "Perfil comercial atualizado",
+        "savedDesc": "A Meta aceitou as alterações.",
+        "saveFailed": "Não foi possível atualizar o perfil comercial",
+        "verticals": {
+          "OTHER": "Outro",
+          "ALCOHOL": "Bebidas alcoólicas",
+          "APPAREL": "Roupas e vestuário",
+          "AUTO": "Automotivo",
+          "BEAUTY": "Beleza, spa e salão",
+          "EDU": "Educação",
+          "ENTERTAIN": "Entretenimento",
+          "EVENT_PLAN": "Planejamento de eventos",
+          "FINANCE": "Finanças e bancos",
+          "GOVT": "Serviço público",
+          "GROCERY": "Alimentos e mercado",
+          "HEALTH": "Medicina e saúde",
+          "HOTEL": "Hotel e hospedagem",
+          "NONPROFIT": "Sem fins lucrativos",
+          "ONLINE_GAMBLING": "Jogos e apostas online",
+          "OTC_DRUGS": "Medicamentos sem receita",
+          "PHYSICAL_GAMBLING": "Jogos e apostas presenciais",
+          "PROF_SERVICES": "Serviços profissionais",
+          "RESTAURANT": "Restaurante",
+          "RETAIL": "Compras e varejo",
+          "TRAVEL": "Viagens e transporte"
+        }
+      }
     },
     "sections": {
       "overview": "Visão geral",
@@ -2832,6 +2889,20 @@
       "bodyTooLong": "O bodyText interativo excede {max} caracteres.",
       "headerTooLong": "O headerText interativo excede {max} caracteres.",
       "footerTooLong": "O footerText interativo excede {max} caracteres."
+    },
+    "businessProfile": {
+      "invalidBody": "A atualização do perfil deve ser um objeto de campos.",
+      "notText": "{field} deve ser texto.",
+      "tooLong": "{field} deve ter {max} caracteres ou menos.",
+      "aboutRequired": "O recado não pode ficar vazio.",
+      "invalidEmail": "Informe um e-mail válido.",
+      "invalidWebsites": "Os sites devem ser uma lista de URLs.",
+      "tooManyWebsites": "Adicione no máximo {max} sites.",
+      "invalidWebsite": "{url} não é um link http:// ou https:// válido.",
+      "invalidVertical": "Escolha uma categoria da lista.",
+      "photoEmpty": "A foto de perfil está vazia.",
+      "photoTooLarge": "A foto de perfil deve ter {max} MB ou menos.",
+      "photoWrongType": "A foto de perfil deve ser uma imagem JPEG ou PNG."
     }
   },
   "Api": {
@@ -3064,6 +3135,14 @@
       "capacityInvalid": "Os agendamentos por horário devem ser um número inteiro de 1 a 1000",
       "availabilityInvalid": "Escolha pelo menos um dia e um horário em que caiba um agendamento",
       "slotTaken": "Esse horário já está lotado"
+    },
+    "businessProfile": {
+      "invalidBody": "Envie o perfil como multipart form data com uma parte JSON \"fields\" e um arquivo \"photo\" opcional.",
+      "photoTooLarge": "A foto de perfil deve ter {max} MB ou menos.",
+      "nothingToUpdate": "Nada para atualizar — altere um campo ou escolha uma nova foto.",
+      "notConnected": "Conecte um número do WhatsApp antes de editar o perfil comercial.",
+      "tokenCorrupted": "Não é possível descriptografar o token de acesso salvo. Redefina e salve novamente a configuração do WhatsApp.",
+      "metaAppIdRequired": "Não foi possível encontrar o app da Meta deste token de acesso, necessário para enviar uma foto de perfil. Defina META_APP_ID no servidor com o id do seu app da Meta (Meta for Developers → Configurações do app → Básico)."
     }
   },
   "Apps": {

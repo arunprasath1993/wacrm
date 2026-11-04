@@ -1983,7 +1983,64 @@
       "phoneNumberIdNotNumeric": "Phone Number ID must contain only digits. Copy the numeric id from Meta → WhatsApp → API Setup, not the phone number itself.",
       "wabaIdNotNumeric": "WhatsApp Business Account ID must contain only digits. Copy it from Meta → WhatsApp → API Setup.",
       "wabaSubscribed": "The WhatsApp Business Account is subscribed to this app — inbound webhooks can be delivered.",
-      "wabaNotSubscribed": "The WhatsApp Business Account is not subscribed to this app, so Meta will not deliver inbound webhooks. Re-enter the access token and save again to subscribe it."
+      "wabaNotSubscribed": "The WhatsApp Business Account is not subscribed to this app, so Meta will not deliver inbound webhooks. Re-enter the access token and save again to subscribe it.",
+      "businessProfile": {
+        "title": "WhatsApp Business Profile",
+        "description": "What customers see when they open your chat info on WhatsApp. Saving here updates the profile on Meta directly.",
+        "loading": "Loading business profile…",
+        "loadFailed": "Could not load the business profile from Meta.",
+        "retry": "Retry",
+        "photoAlt": "Business profile photo",
+        "changePhoto": "Change photo",
+        "uploadPhoto": "Upload photo",
+        "photoHint": "JPEG or PNG, up to 5 MB. A 640×640 square looks best.",
+        "photoWrongType": "Profile photo must be a JPEG or PNG image.",
+        "photoTooLarge": "Profile photo must be 5 MB or smaller.",
+        "about": "About",
+        "aboutPlaceholder": "e.g. Open 9am–6pm, Mon–Sat",
+        "aboutHint": "Shown under your business name on your WhatsApp profile.",
+        "aboutRequired": "About cannot be empty.",
+        "category": "Category",
+        "categoryPlaceholder": "Choose a category",
+        "descriptionLabel": "Description",
+        "descriptionPlaceholder": "Tell customers what your business does",
+        "address": "Address",
+        "email": "Email",
+        "websites": "Websites",
+        "website1": "Website 1",
+        "website2": "Website 2",
+        "displayNameNote": "The display name is changed in Meta WhatsApp Manager and needs Meta approval — it cannot be edited here.",
+        "propagationNote": "Customers may take a few minutes to see a new photo or About on their phones.",
+        "adminOnly": "Only admins can change the business profile.",
+        "save": "Save business profile",
+        "saving": "Saving…",
+        "saved": "Business profile updated",
+        "savedDesc": "Meta accepted the changes.",
+        "saveFailed": "Could not update the business profile",
+        "verticals": {
+          "OTHER": "Other",
+          "ALCOHOL": "Alcoholic beverages",
+          "APPAREL": "Clothing and apparel",
+          "AUTO": "Automotive",
+          "BEAUTY": "Beauty, spa and salon",
+          "EDU": "Education",
+          "ENTERTAIN": "Entertainment",
+          "EVENT_PLAN": "Event planning and service",
+          "FINANCE": "Finance and banking",
+          "GOVT": "Public service",
+          "GROCERY": "Food and grocery",
+          "HEALTH": "Medical and health",
+          "HOTEL": "Hotel and lodging",
+          "NONPROFIT": "Non-profit",
+          "ONLINE_GAMBLING": "Online gambling and gaming",
+          "OTC_DRUGS": "Over-the-counter drugs",
+          "PHYSICAL_GAMBLING": "Non-online gambling and gaming",
+          "PROF_SERVICES": "Professional services",
+          "RESTAURANT": "Restaurant",
+          "RETAIL": "Shopping and retail",
+          "TRAVEL": "Travel and transportation"
+        }
+      }
     },
     "sections": {
       "overview": "Overview",
@@ -2832,6 +2889,20 @@
       "bodyTooLong": "Interactive bodyText exceeds {max} chars.",
       "headerTooLong": "Interactive headerText exceeds {max} chars.",
       "footerTooLong": "Interactive footerText exceeds {max} chars."
+    },
+    "businessProfile": {
+      "invalidBody": "The profile update must be an object of fields.",
+      "notText": "{field} must be text.",
+      "tooLong": "{field} must be {max} characters or fewer.",
+      "aboutRequired": "About cannot be empty.",
+      "invalidEmail": "Enter a valid email address.",
+      "invalidWebsites": "Websites must be a list of URLs.",
+      "tooManyWebsites": "Add at most {max} websites.",
+      "invalidWebsite": "{url} is not a valid http:// or https:// link.",
+      "invalidVertical": "Choose a category from the list.",
+      "photoEmpty": "The profile photo is empty.",
+      "photoTooLarge": "Profile photo must be {max} MB or smaller.",
+      "photoWrongType": "Profile photo must be a JPEG or PNG image."
     }
   },
   "Api": {
@@ -3064,6 +3135,14 @@
       "capacityInvalid": "Bookings per slot must be a whole number from 1 to 1000",
       "availabilityInvalid": "Choose at least one day, and hours long enough to fit a booking",
       "slotTaken": "That time slot is already full"
+    },
+    "businessProfile": {
+      "invalidBody": "Send the profile as multipart form data with a JSON \"fields\" part and an optional \"photo\" file.",
+      "photoTooLarge": "Profile photo must be {max} MB or smaller.",
+      "nothingToUpdate": "Nothing to update — change a field or pick a new photo.",
+      "notConnected": "Connect a WhatsApp number before editing its business profile.",
+      "tokenCorrupted": "The stored access token cannot be decrypted. Reset and re-save the WhatsApp configuration.",
+      "metaAppIdRequired": "Could not find the Meta app for this access token, which is needed to upload a profile photo. Set META_APP_ID on the server to your Meta app id (Meta for Developers → App settings → Basic)."
     }
   },
   "Apps": {

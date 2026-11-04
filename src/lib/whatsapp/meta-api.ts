@@ -171,6 +171,58 @@ export async function getPhoneNumberHealth(
 }
 
 // ============================================================
+// Business profile (photo, About, description, ... customers see)
+// ============================================================
+
+import type { BusinessProfileUpdate, MetaBusinessProfile } from './business-profile'
+
+const BUSINESS_PROFILE_FIELDS =
+  'about,address,description,email,profile_picture_url,websites,vertical'
+
+/** Read the number's WhatsApp Business Profile. */
+export async function getBusinessProfile(
+  args: VerifyPhoneNumberArgs,
+): Promise<MetaBusinessProfile> {
+  const { phoneNumberId, accessToken } = args
+  const response = await fetch(
+    `${META_API_BASE}/${phoneNumberId}/whatsapp_business_profile?fields=${BUSINESS_PROFILE_FIELDS}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  )
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = (await response.json()) as { data?: MetaBusinessProfile[] }
+  return data.data?.[0] ?? {}
+}
+
+export interface UpdateBusinessProfileArgs {
+  phoneNumberId: string
+  accessToken: string
+  /** Only the keys present are changed on Meta's side. */
+  fields: BusinessProfileUpdate
+  /** Handle from `uploadResumableMedia` — sets the profile photo. */
+  profilePictureHandle?: string
+}
+
+/** Update the number's WhatsApp Business Profile. */
+export async function updateBusinessProfile(args: UpdateBusinessProfileArgs): Promise<void> {
+  const { phoneNumberId, accessToken, fields, profilePictureHandle } = args
+  const body: Record<string, unknown> = { messaging_product: 'whatsapp', ...fields }
+  if (profilePictureHandle) body.profile_picture_handle = profilePictureHandle
+  const response = await fetch(`${META_API_BASE}/${phoneNumberId}/whatsapp_business_profile`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+}
+
+// ============================================================
 // Cloud API registration (subscription for inbound webhooks)
 // ============================================================
 //
@@ -618,6 +670,40 @@ export async function sendTemplateMessage(
 //        → { h: "<handle>" }
 //
 // See https://developers.facebook.com/docs/graph-api/guides/upload
+
+/**
+ * The Meta app id the Resumable Upload API is keyed on. META_APP_ID wins
+ * when set; otherwise ask Meta which app the access token was issued
+ * for, so photo and template-header uploads work on deployments that
+ * never set it (and can't drift from the token's app). Returns null when
+ * neither works.
+ */
+export async function resolveMetaAppId(accessToken: string): Promise<string | null> {
+  const fromEnv = process.env.META_APP_ID?.trim()
+  if (fromEnv) return fromEnv
+
+  const headers = { Authorization: `Bearer ${accessToken}` }
+  // GET /app answers for the token's own app. debug_token is the
+  // documented fallback and carries the same id as `data.app_id`.
+  const lookups: [string, (body: unknown) => unknown][] = [
+    [`${META_API_BASE}/app?fields=id`, (b) => (b as { id?: unknown })?.id],
+    [
+      `${META_API_BASE}/debug_token?${new URLSearchParams({ input_token: accessToken })}`,
+      (b) => (b as { data?: { app_id?: unknown } })?.data?.app_id,
+    ],
+  ]
+  for (const [url, pick] of lookups) {
+    try {
+      const res = await fetch(url, { headers })
+      if (!res.ok) continue
+      const id = pick(await res.json())
+      if (typeof id === 'string' && id) return id
+    } catch {
+      // network failure — try the next lookup
+    }
+  }
+  return null
+}
 
 export interface UploadResumableMediaArgs {
   /** Meta App id (env META_APP_ID) — resumable upload is app-scoped. */
