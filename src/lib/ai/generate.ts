@@ -1,0 +1,80 @@
+import {
+  AiError,
+  type AiConfig,
+  type AiUsage,
+  type ChatMessage,
+  type GenerateResult,
+} from './types'
+import { HANDOFF_SENTINEL, aiRequestTimeoutMs } from './defaults'
+import { generateOpenAi } from './providers/openai'
+import { generateOpenAiCompatible } from './providers/openai-compatible'
+import { generateAnthropic } from './providers/anthropic'
+import { toWhatsAppFormatting } from './whatsapp-format'
+import { extractBookingMarker } from '@/lib/bookings/marker'
+
+export interface GenerateArgs {
+  config: AiConfig
+  /** Fully-built system prompt (see `buildSystemPrompt`). */
+  systemPrompt: string
+  /** Recent conversation turns, oldest first. */
+  messages: ChatMessage[]
+}
+
+/**
+ * Generate the next reply from the account's configured provider.
+ * Dispatches to the right adapter, then parses the handoff sentinel out
+ * of the raw text. Throws `AiError` on any provider/network failure.
+ */
+export async function generateReply(args: GenerateArgs): Promise<GenerateResult> {
+  const { config, systemPrompt, messages } = args
+  const timeoutMs = aiRequestTimeoutMs()
+  const providerArgs = {
+    apiKey: config.apiKey,
+    model: config.model,
+    systemPrompt,
+    messages,
+    timeoutMs,
+    baseUrl: config.baseUrl,
+  }
+
+  let result: { text: string; usage: AiUsage | null }
+  switch (config.provider) {
+    case 'openai':
+      result = await generateOpenAi(providerArgs)
+      break
+    case 'openai_compatible':
+      result = await generateOpenAiCompatible(providerArgs)
+      break
+    case 'anthropic':
+      result = await generateAnthropic(providerArgs)
+      break
+    default:
+      throw new AiError(`Unsupported AI provider: ${config.provider}`, {
+        code: 'unsupported_provider',
+        status: 400,
+      })
+  }
+
+  return parseGeneration(result.text, result.usage)
+}
+
+/**
+ * Split the raw model output into `{ text, handoff, usage, booking }`.
+ * The sentinel can appear alone or trailing a partial reply; either way
+ * we treat the turn as a handoff and strip the marker from any remaining
+ * text. The booking marker is stripped in every mode, so it can't reach
+ * a customer or an agent's composer. Markdown the model slipped in is
+ * converted to WhatsApp formatting. `usage` is passed straight through
+ * (null when the provider didn't report it).
+ */
+export function parseGeneration(
+  raw: string,
+  usage: AiUsage | null = null,
+): GenerateResult {
+  const handoff = raw.includes(HANDOFF_SENTINEL)
+  const { text: withoutBooking, marker, malformed } = extractBookingMarker(raw)
+  const text = toWhatsAppFormatting(
+    withoutBooking.split(HANDOFF_SENTINEL).join('').trim(),
+  )
+  return { text, handoff, usage, booking: marker, bookingMalformed: malformed }
+}

@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { validateFlowForActivation, reachableFromEntry } from "./validate";
+import {
+  validateFlowForActivation,
+  reachableFromEntry,
+  findAutoAdvancingCycles,
+} from "./validate";
 
 const validFlow = {
   name: "Welcome",
@@ -420,6 +424,102 @@ describe("validateFlowForActivation — nodes", () => {
   });
 });
 
+describe("validateFlowForActivation — send_media", () => {
+  const baseFlow = { ...validFlow, entry_node_id: "s" };
+  const nodesWith = (mediaConfig: Record<string, unknown>) => [
+    { node_key: "s", node_type: "start", config: { next_node_key: "m" } },
+    { node_key: "m", node_type: "send_media", config: mediaConfig },
+    { node_key: "h", node_type: "handoff", config: {} },
+  ];
+
+  it("passes on a fully-populated send_media node", () => {
+    const issues = validateFlowForActivation(
+      baseFlow,
+      nodesWith({
+        media_type: "document",
+        media_url: "https://cdn.example/invoice.pdf",
+        caption: "Your invoice",
+        filename: "invoice.pdf",
+        next_node_key: "h",
+      }),
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it("flags missing media_url", () => {
+    const issues = validateFlowForActivation(
+      baseFlow,
+      nodesWith({
+        media_type: "image",
+        media_url: "",
+        next_node_key: "h",
+      }),
+    );
+    expect(
+      issues.some((i) => i.node_key === "m" && i.field === "media_url"),
+    ).toBe(true);
+  });
+
+  it("flags missing media_type", () => {
+    const issues = validateFlowForActivation(
+      baseFlow,
+      nodesWith({
+        media_url: "https://cdn.example/x.png",
+        next_node_key: "h",
+      }),
+    );
+    expect(
+      issues.some((i) => i.node_key === "m" && i.field === "media_type"),
+    ).toBe(true);
+  });
+
+  it("flags next_node_key pointing at a non-existent node", () => {
+    const issues = validateFlowForActivation(
+      baseFlow,
+      nodesWith({
+        media_type: "image",
+        media_url: "https://cdn.example/x.png",
+        next_node_key: "ghost",
+      }),
+    );
+    expect(
+      issues.some(
+        (i) =>
+          i.node_key === "m" &&
+          i.field === "next_node_key" &&
+          i.message.includes("ghost"),
+      ),
+    ).toBe(true);
+  });
+
+  it("flags caption exceeding 1024 chars", () => {
+    const issues = validateFlowForActivation(
+      baseFlow,
+      nodesWith({
+        media_type: "image",
+        media_url: "https://cdn.example/x.png",
+        caption: "x".repeat(1025),
+        next_node_key: "h",
+      }),
+    );
+    expect(
+      issues.some((i) => i.node_key === "m" && i.field === "caption"),
+    ).toBe(true);
+  });
+
+  it("contributes its next_node_key to reachability", () => {
+    const set = reachableFromEntry(
+      "s",
+      nodesWith({
+        media_type: "image",
+        media_url: "https://cdn.example/x.png",
+        next_node_key: "h",
+      }),
+    );
+    expect(set).toEqual(new Set(["s", "m", "h"]));
+  });
+});
+
 describe("reachableFromEntry", () => {
   it("walks the graph from the entry", () => {
     const set = reachableFromEntry("start", validNodes);
@@ -449,5 +549,80 @@ describe("reachableFromEntry", () => {
     ];
     const set = reachableFromEntry("a", nodes);
     expect(set).toEqual(new Set(["a", "b"]));
+  });
+});
+
+describe("auto-advancing cycles", () => {
+  const loopNodes = [
+    { node_key: "start", node_type: "start", config: { next_node_key: "hello" } },
+    {
+      node_key: "hello",
+      node_type: "send_message",
+      config: { text: "Hi", next_node_key: "check" },
+    },
+    {
+      node_key: "check",
+      node_type: "condition",
+      config: {
+        subject: "var",
+        subject_key: "x",
+        operator: "present",
+        true_next: "hello",
+        false_next: "done",
+      },
+    },
+    { node_key: "done", node_type: "end", config: {} },
+  ];
+
+  it("rejects a loop made only of auto-advancing nodes", () => {
+    const issues = validateFlowForActivation(validFlow, loopNodes);
+    const cycle = issues.filter((i) => i.message.includes("hello, check"));
+    expect(cycle).toHaveLength(1);
+    expect(cycle[0]).toMatchObject({
+      severity: "error",
+      scope: "node",
+      node_key: "hello",
+    });
+  });
+
+  it("rejects a self-looping node", () => {
+    expect(
+      findAutoAdvancingCycles([
+        {
+          node_key: "spam",
+          node_type: "send_message",
+          config: { text: "x", next_node_key: "spam" },
+        },
+      ]),
+    ).toEqual([["spam"]]);
+  });
+
+  it("accepts a loop that passes through a node waiting for input", () => {
+    const nodes = [
+      { node_key: "start", node_type: "start", config: { next_node_key: "menu" } },
+      {
+        node_key: "menu",
+        node_type: "send_buttons",
+        config: {
+          text: "Pick",
+          buttons: [
+            { reply_id: "again", title: "Again", next_node_key: "info" },
+            { reply_id: "stop", title: "Stop", next_node_key: "done" },
+          ],
+        },
+      },
+      {
+        node_key: "info",
+        node_type: "send_message",
+        config: { text: "Info", next_node_key: "menu" },
+      },
+      { node_key: "done", node_type: "end", config: {} },
+    ];
+    expect(findAutoAdvancingCycles(nodes)).toEqual([]);
+    expect(validateFlowForActivation(validFlow, nodes)).toEqual([]);
+  });
+
+  it("finds no cycle in the well-formed flow", () => {
+    expect(findAutoAdvancingCycles(validNodes)).toEqual([]);
   });
 });

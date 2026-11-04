@@ -1,15 +1,26 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Self-hosted fonts (no build-time Google Fonts fetch). Both families
+ * come from Ek Type and cover Tamil + Latin, so the bilingual help
+ * guides render in one coherent voice. */
+@import "@fontsource-variable/anek-tamil/index.css";
+@import "@fontsource/mukta-malar/400.css";
+@import "@fontsource/mukta-malar/500.css";
+@import "@fontsource/mukta-malar/600.css";
+@import "@fontsource/mukta-malar/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-sans: "Mukta Malar", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: "Anek Tamil Variable", "Mukta Malar", ui-sans-serif, sans-serif;
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-signal-foreground: var(--signal-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,6 +50,19 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Secondary card surface (tile / hover backgrounds) and the accent
+   * extras the Settings redesign leans on. The raw --primary-* vars
+   * already exist per-accent below; these mappings expose them (and
+   * --card-2) as Tailwind utilities: bg-card-2, bg-primary-soft,
+   * bg-primary-soft-2, hover:bg-primary-hover. */
+  --color-card-2: var(--card-2);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-2: var(--primary-soft-2);
+  --color-status-good: var(--status-good);
+  --color-status-warning: var(--status-warning);
+  --color-status-serious: var(--status-serious);
+  --color-status-critical: var(--status-critical);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -49,210 +73,205 @@
 }
 
 /* ============================================================
- * COLOR THEMES
+ * THEMING — two orthogonal dimensions
  *
- * 5 dark themes sharing structure, swapping only the primary
- * accent (and a tiny hue rotation on the slate base). Switched
- * at runtime by setting `document.documentElement.dataset.theme`
- * — see ThemeProvider + the inline boot script in layout.tsx.
+ *   1. MODE   (light / dark)  → neutral surfaces. Selected with
+ *      `document.documentElement.dataset.mode`. Defaults to dark.
+ *   2. ACCENT (violet / …)    → the primary color only. Selected
+ *      with `document.documentElement.dataset.theme`.
  *
- * `:root` mirrors Violet so default visitors render correctly
- * before JS runs. `[data-theme="violet"]` is included for the
- * explicit-select path (settings UI sets it after a pick).
+ * The two compose: any accent works in either mode. Neutral
+ * tokens (background / card / border / muted / sidebar surfaces /
+ * neutral charts / radius) live in the MODE blocks below; accent
+ * tokens (--primary*, --ring, --chart-1, --sidebar-primary*,
+ * --sidebar-ring) live in the ACCENT blocks. They set disjoint
+ * variables, so cascade order between them doesn't matter.
  *
- * The three `--primary-*` extras (hover / soft / soft-2) are
- * new — used for hovered primary buttons and tinted-primary
- * surfaces (sidebar active pill, validation badges). Components
- * that don't use them remain backward-compatible.
+ * `:root` carries the dark-mode + violet defaults so a visitor
+ * renders correctly before JS runs; the boot script in
+ * layout.tsx replays the saved mode + accent before first paint.
+ *
+ * The three `--primary-*` extras (hover / soft / soft-2) feed
+ * hovered primary buttons and tinted-primary surfaces (sidebar
+ * active pill, validation badges).
  *
  * Token shapes come straight from the design handoff at
  * project/Color Themes.html — change one, change the other.
  * ============================================================ */
 
+/* ---- MODE: neutral surfaces ---- */
+
 :root,
+html[data-mode="dark"] {
+  /* "Deep water" ink — neutrals carry a teal hue instead of slate. */
+  --background: oklch(0.185 0.022 210);
+  --foreground: oklch(0.95 0.012 190);
+  --card: oklch(0.225 0.025 208);
+  --card-2: oklch(0.25 0.027 206);
+  --card-foreground: oklch(0.95 0.012 190);
+  --popover: oklch(0.235 0.026 208);
+  --popover-foreground: oklch(0.95 0.012 190);
+  --secondary: oklch(0.27 0.026 205);
+  --secondary-foreground: oklch(0.95 0.012 190);
+  --muted: oklch(0.27 0.026 205);
+  --muted-foreground: oklch(0.72 0.03 195);
+  --accent: oklch(0.28 0.028 204);
+  --accent-foreground: oklch(0.95 0.012 190);
+  --destructive: oklch(0.62 0.2 30);
+  --border: oklch(0.32 0.03 203);
+  --input: oklch(0.34 0.03 203);
+  --chart-2: oklch(0.78 0.14 75);
+  --chart-3: oklch(0.6 0.08 230);
+  --chart-4: oklch(0.5 0.05 205);
+  --chart-5: oklch(0.4 0.03 205);
+  --radius: 0.7rem;
+  --sidebar: oklch(0.16 0.024 212);
+  --sidebar-foreground: oklch(0.93 0.012 190);
+  --sidebar-accent: oklch(0.24 0.03 206);
+  --sidebar-accent-foreground: oklch(0.97 0.01 190);
+  --sidebar-border: oklch(0.27 0.028 206);
+  /* Turmeric: attention, unread, "needs you" — never decoration. */
+  --signal: oklch(0.8 0.15 78);
+  --signal-soft: oklch(0.8 0.15 78 / 0.14);
+  --signal-foreground: oklch(0.22 0.04 70);
+  --status-good: #2fbf71;
+  --status-warning: #f0b43c;
+  --status-serious: #ec835a;
+  --status-critical: #ef5f55;
+}
+
+html[data-mode="light"] {
+  /* Daylight: mineral-white surfaces, deep-water ink text. */
+  --background: oklch(0.972 0.006 195);
+  --foreground: oklch(0.25 0.035 210);
+  --card: oklch(1 0 0);
+  --card-2: oklch(0.982 0.005 195);
+  --card-foreground: oklch(0.25 0.035 210);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.25 0.035 210);
+  --secondary: oklch(0.945 0.01 195);
+  --secondary-foreground: oklch(0.28 0.035 210);
+  --muted: oklch(0.945 0.01 195);
+  --muted-foreground: oklch(0.48 0.03 205);
+  --accent: oklch(0.94 0.012 195);
+  --accent-foreground: oklch(0.28 0.035 210);
+  --destructive: oklch(0.55 0.2 28);
+  --border: oklch(0.9 0.013 195);
+  --input: oklch(0.88 0.015 195);
+  --chart-2: oklch(0.72 0.15 70);
+  --chart-3: oklch(0.6 0.09 230);
+  --chart-4: oklch(0.75 0.05 200);
+  --chart-5: oklch(0.85 0.03 200);
+  --radius: 0.7rem;
+  /* The rail stays ink in daylight too: it's the product's spine. */
+  --sidebar: oklch(0.24 0.035 210);
+  --sidebar-foreground: oklch(0.93 0.012 190);
+  --sidebar-accent: oklch(0.31 0.04 207);
+  --sidebar-accent-foreground: oklch(0.98 0.008 190);
+  --sidebar-border: oklch(0.32 0.035 207);
+  --signal: oklch(0.72 0.15 72);
+  --signal-soft: oklch(0.72 0.15 72 / 0.16);
+  --signal-foreground: oklch(0.26 0.05 65);
+  --status-good: #0b7f4a;
+  --status-warning: #946100;
+  --status-serious: #c2532a;
+  --status-critical: #c43232;
+}
+
+/* ---- ACCENT: primary color ---- */
+
+/* Nixie — default accent. Clear-water teal, from the purifier
+ * brand the CRM grew out of; deliberately not WhatsApp green. */
+:root,
+html[data-theme="nixie"] {
+  --primary: oklch(0.66 0.12 183);
+  --primary-foreground: oklch(0.17 0.03 200);
+  --primary-hover: oklch(0.72 0.12 183);
+  --primary-soft: oklch(0.66 0.12 183 / 0.14);
+  --primary-soft-2: oklch(0.66 0.12 183 / 0.24);
+  --ring: oklch(0.66 0.12 183);
+  --chart-1: oklch(0.66 0.12 183);
+  --sidebar-primary: oklch(0.74 0.12 183);
+  --sidebar-primary-foreground: oklch(0.17 0.03 200);
+  --sidebar-ring: oklch(0.66 0.12 183);
+}
+
+html[data-mode="light"][data-theme="nixie"] {
+  --primary: oklch(0.52 0.1 185);
+  --primary-foreground: oklch(0.99 0.005 190);
+  --primary-hover: oklch(0.47 0.1 185);
+  --primary-soft: oklch(0.52 0.1 185 / 0.1);
+  --primary-soft-2: oklch(0.52 0.1 185 / 0.18);
+  --ring: oklch(0.52 0.1 185);
+  --chart-1: oklch(0.52 0.1 185);
+}
+
 html[data-theme="violet"] {
-  --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.18 0.01 260);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.18 0.01 260);
-  --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.526 0.247 293);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.6 0.22 293);
   --primary-soft: oklch(0.526 0.247 293 / 0.12);
   --primary-soft-2: oklch(0.526 0.247 293 / 0.2);
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.65 0.01 260);
-  --accent: oklch(0.22 0.01 260);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.28 0.01 260);
-  --input: oklch(0.28 0.01 260);
   --ring: oklch(0.526 0.247 293);
   --chart-1: oklch(0.526 0.247 293);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.16 0.01 260);
-  --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.526 0.247 293);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.22 0.01 260);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.28 0.01 260);
   --sidebar-ring: oklch(0.526 0.247 293);
 }
 
 html[data-theme="emerald"] {
-  --background: oklch(0.135 0.01 200);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.185 0.01 200);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.185 0.01 200);
-  --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.62 0.16 162);
   --primary-foreground: oklch(0.16 0.02 162);
   --primary-hover: oklch(0.68 0.15 162);
   --primary-soft: oklch(0.62 0.16 162 / 0.12);
   --primary-soft-2: oklch(0.62 0.16 162 / 0.22);
-  --secondary: oklch(0.225 0.01 200);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.225 0.01 200);
-  --muted-foreground: oklch(0.65 0.01 200);
-  --accent: oklch(0.225 0.01 200);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.285 0.01 200);
-  --input: oklch(0.285 0.01 200);
   --ring: oklch(0.62 0.16 162);
   --chart-1: oklch(0.62 0.16 162);
   --chart-2: oklch(0.7 0.14 195);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.165 0.01 200);
-  --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.62 0.16 162);
   --sidebar-primary-foreground: oklch(0.16 0.02 162);
-  --sidebar-accent: oklch(0.225 0.01 200);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.285 0.01 200);
   --sidebar-ring: oklch(0.62 0.16 162);
 }
 
 html[data-theme="cobalt"] {
-  --background: oklch(0.13 0.015 252);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.18 0.015 252);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.18 0.015 252);
-  --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.585 0.2 254);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.66 0.18 254);
   --primary-soft: oklch(0.585 0.2 254 / 0.12);
   --primary-soft-2: oklch(0.585 0.2 254 / 0.22);
-  --secondary: oklch(0.22 0.015 252);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.22 0.015 252);
-  --muted-foreground: oklch(0.65 0.012 252);
-  --accent: oklch(0.22 0.015 252);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.28 0.015 252);
-  --input: oklch(0.28 0.015 252);
   --ring: oklch(0.585 0.2 254);
   --chart-1: oklch(0.585 0.2 254);
   --chart-2: oklch(0.7 0.15 220);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.16 0.015 252);
-  --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.585 0.2 254);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.22 0.015 252);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.28 0.015 252);
   --sidebar-ring: oklch(0.585 0.2 254);
 }
 
 html[data-theme="amber"] {
-  --background: oklch(0.135 0.012 60);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.185 0.012 60);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.185 0.012 60);
-  --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.745 0.16 65);
   --primary-foreground: oklch(0.18 0.03 65);
   --primary-hover: oklch(0.8 0.15 65);
   --primary-soft: oklch(0.745 0.16 65 / 0.12);
   --primary-soft-2: oklch(0.745 0.16 65 / 0.22);
-  --secondary: oklch(0.225 0.012 60);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.225 0.012 60);
-  --muted-foreground: oklch(0.66 0.01 60);
-  --accent: oklch(0.225 0.012 60);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.285 0.012 60);
-  --input: oklch(0.285 0.012 60);
   --ring: oklch(0.745 0.16 65);
   --chart-1: oklch(0.745 0.16 65);
   --chart-2: oklch(0.7 0.15 35);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.165 0.012 60);
-  --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.745 0.16 65);
   --sidebar-primary-foreground: oklch(0.18 0.03 65);
-  --sidebar-accent: oklch(0.225 0.012 60);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.285 0.012 60);
   --sidebar-ring: oklch(0.745 0.16 65);
 }
 
 html[data-theme="rose"] {
-  --background: oklch(0.13 0.012 15);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.18 0.012 15);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.18 0.012 15);
-  --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.645 0.22 16);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.71 0.2 16);
   --primary-soft: oklch(0.645 0.22 16 / 0.12);
   --primary-soft-2: oklch(0.645 0.22 16 / 0.22);
-  --secondary: oklch(0.22 0.012 15);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.22 0.012 15);
-  --muted-foreground: oklch(0.65 0.01 15);
-  --accent: oklch(0.22 0.012 15);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.28 0.012 15);
-  --input: oklch(0.28 0.012 15);
   --ring: oklch(0.645 0.22 16);
   --chart-1: oklch(0.645 0.22 16);
   --chart-2: oklch(0.7 0.18 340);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.16 0.012 15);
-  --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.645 0.22 16);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.22 0.012 15);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.28 0.012 15);
   --sidebar-ring: oklch(0.645 0.22 16);
 }
 
@@ -263,7 +282,26 @@ html[data-theme="rose"] {
   body {
     @apply bg-background text-foreground;
   }
+  .recharts-cartesian-axis-tick-value {
+    fill: var(--muted-foreground);
+  }
   html {
     @apply font-sans;
+  }
+  /* Headings speak in Anek Tamil, slightly tightened. */
+  h1, h2, h3, .font-heading {
+    font-family: var(--font-heading);
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

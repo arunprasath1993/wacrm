@@ -5,7 +5,11 @@ import type {
   AutomationTriggerType,
   ConditionStepConfig,
   KeywordMatchTriggerConfig,
+  InteractiveReplyTriggerConfig,
+  TagTriggerConfig,
   SendMessageStepConfig,
+  SendButtonsStepConfig,
+  SendListStepConfig,
   SendTemplateStepConfig,
   SendWebhookStepConfig,
   TagStepConfig,
@@ -15,7 +19,16 @@ import type {
   AssignConversationStepConfig,
 } from '@/types'
 import { supabaseAdmin } from './admin-client'
-import { engineSendText, engineSendTemplate } from './meta-send'
+import { addContactTagIfAbsent } from '@/lib/contacts/tag-write'
+import { MAX_TAG_CHAIN_DEPTH, getTagChainDepth } from '@/lib/contacts/tag-chain'
+import { engineSendText, engineSendTemplate, engineSendInteractive } from './meta-send'
+import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
+import { isDeliverableUrl } from '@/lib/webhooks/ssrf'
+import { getT } from '@/lib/i18n/translate'
+import { isWithinTimeWindow } from './time-of-day'
+
+/** Step errors land in automation_logs and are shown on the logs page. */
+const tErr = getT('LibErrors.engine')
 
 // ------------------------------------------------------------
 // Public API
@@ -32,17 +45,25 @@ export interface AutomationContext {
   tag_id?: string
   /** Agent the conversation was assigned to, for conversation_assigned. */
   agent_id?: string
+  /** Button / list-row id the customer tapped, for interactive_reply. */
+  interactive_reply_id?: string
 }
 
 export interface DispatchInput {
-  userId: string
+  /** Account-level tenancy key. Drives the lookup of which active
+   *  automations to fire — `automations.account_id` is the tenant
+   *  isolation after migration 017. Replaces the previous `userId`
+   *  field; the per-automation user_id is read off each row when
+   *  needed (sender identity for outbound messages, log audit). */
+  accountId: string
   triggerType: AutomationTriggerType
   contactId?: string | null
   context?: AutomationContext
 }
 
 /**
- * Fire all active automations matching the given trigger for a user.
+ * Fire all active automations matching the given trigger for an
+ * account.
  *
  * Must never throw — callers use fire-and-forget from the webhook.
  * All errors are caught and logged; per-automation failures are
@@ -51,10 +72,61 @@ export interface DispatchInput {
 export async function runAutomationsForTrigger(input: DispatchInput): Promise<void> {
   try {
     const db = supabaseAdmin()
+
+    // Tenant isolation. `contactId` can be caller-supplied (the manual
+    // POST /api/automations/engine entrypoint reads it straight from the
+    // request body), and every step below runs through the service-role
+    // client, which bypasses RLS. So before any step can touch the
+    // contact, verify it actually belongs to this account. A foreign or
+    // forged id is refused silently — callers are fire-and-forget, and a
+    // distinct error would leak whether a given contact UUID exists.
+    if (input.contactId) {
+      const { data: owned, error: ownErr } = await db
+        .from('contacts')
+        .select('id')
+        .eq('id', input.contactId)
+        .eq('account_id', input.accountId)
+        .maybeSingle()
+      if (ownErr) {
+        console.error('[automations] contact ownership check failed:', ownErr)
+        return
+      }
+      if (!owned) {
+        console.warn('[automations] contact not in account, refusing dispatch', input.contactId)
+        return
+      }
+    }
+
+    // Same argument for `context.conversation_id` (GHSA-m4fx-g6pr-hrw8).
+    // It rides in on the same caller-supplied body, and every send step
+    // writes a `messages` row and a `conversations` preview update keyed
+    // on it through the service-role client — so an unvalidated id let a
+    // caller inject a message into another tenant's conversation. Refuse
+    // the same way: silently, with no existence oracle.
+    if (input.context?.conversation_id) {
+      const { data: conv, error: convErr } = await db
+        .from('conversations')
+        .select('id')
+        .eq('id', input.context.conversation_id)
+        .eq('account_id', input.accountId)
+        .maybeSingle()
+      if (convErr) {
+        console.error('[automations] conversation ownership check failed:', convErr)
+        return
+      }
+      if (!conv) {
+        console.warn(
+          '[automations] conversation not in account, refusing dispatch',
+          input.context.conversation_id,
+        )
+        return
+      }
+    }
+
     const { data: automations, error } = await db
       .from('automations')
       .select('*')
-      .eq('user_id', input.userId)
+      .eq('account_id', input.accountId)
       .eq('trigger_type', input.triggerType)
       .eq('is_active', true)
 
@@ -84,12 +156,18 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
 export async function resumePendingExecution(pending: {
   id: string
   automation_id: string
+  /** Audit-only; the automation row carries account_id for tenancy. */
   user_id: string
+  /** Account-scoped lookups read from the automation row, so this
+   *  field is just here to mirror the row shape and keep the cron's
+   *  pass-through self-documenting. */
+  account_id: string
   contact_id: string | null
   log_id: string | null
   parent_step_id: string | null
   branch: 'yes' | 'no' | null
   next_step_position: number
+  parked_step_id?: string | null
   context: AutomationContext
 }): Promise<void> {
   const db = supabaseAdmin()
@@ -105,14 +183,24 @@ export async function resumePendingExecution(pending: {
     return
   }
 
+  if (!(automation as Automation).is_active) {
+    await markPending(pending.id, 'expired')
+    await setLogError(pending.log_id, tErr('pausedWhileWaiting'))
+    return
+  }
+
   try {
-    await executeStepsFrom({
+    const resumePoint = await resolveResumePoint(pending, pending.automation_id)
+    if (!resumePoint) {
+      await markPending(pending.id, 'expired')
+      await setLogError(pending.log_id, tErr('stepRemovedWhileWaiting'))
+      return
+    }
+    await runResumed({
       automation: automation as Automation,
       contactId: pending.contact_id,
       context: pending.context ?? {},
-      parentStepId: pending.parent_step_id,
-      branch: pending.branch,
-      startPosition: pending.next_step_position,
+      ...resumePoint,
       logId: pending.log_id,
       triggerEvent: 'resumed_wait',
     })
@@ -121,6 +209,208 @@ export async function resumePendingExecution(pending: {
     console.error('[automations] resume failed:', err)
     await markPending(pending.id, 'failed')
   }
+}
+
+/** How long a `wait_for_reply` step waits: WhatsApp's 24h service window. */
+export const REPLY_WAIT_MS = 24 * 60 * 60 * 1000
+
+export interface AwaitingReplyInput {
+  accountId: string
+  contactId: string
+  /** The inbound that may be the reply. Overwrites the parked run's
+   *  message fields so the steps after the wait see the reply. */
+  context: Pick<AutomationContext, 'message_text' | 'conversation_id' | 'interactive_reply_id'>
+}
+
+/**
+ * Hand an inbound message to the contact's automation run that is parked
+ * at a `wait_for_reply` step, if there is one.
+ *
+ * Returns true when a parked run took the message — the caller then
+ * skips the content triggers (`new_message_received`, `keyword_match`,
+ * `interactive_reply`) and AI auto-reply for it, the same way a Flow
+ * consuming a message suppresses them.
+ *
+ * Must never throw — it runs inside the webhook's `after()` block.
+ */
+export async function resumeAwaitingReply(input: AwaitingReplyInput): Promise<boolean> {
+  let claimedId: string | null = null
+  try {
+    const db = supabaseAdmin()
+    // Newest first; a park supersedes older waits, so normally there is
+    // at most one. The deadline is checked here rather than trusted to
+    // the cron sweep, so an expired wait is never resumed even when the
+    // cron isn't running.
+    const { data: rows, error } = await db
+      .from('automation_pending_executions')
+      .select('*')
+      .eq('account_id', input.accountId)
+      .eq('contact_id', input.contactId)
+      .eq('status', 'awaiting_reply')
+      .gt('run_at', new Date().toISOString())
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (error) {
+      console.error('[automations] awaiting-reply lookup failed:', error)
+      return false
+    }
+    const pending = rows?.[0] as PendingRow | undefined
+    if (!pending) return false
+
+    // Claim it. Gated on the CURRENT status so two deliveries racing on
+    // the same parked run can't both resume it.
+    const { data: claim } = await db
+      .from('automation_pending_executions')
+      .update({ status: 'running' })
+      .eq('id', pending.id)
+      .eq('status', 'awaiting_reply')
+      .select('id')
+      .maybeSingle()
+    if (!claim) return false
+    claimedId = pending.id
+
+    const { data: automation } = await db
+      .from('automations')
+      .select('*')
+      .eq('id', pending.automation_id)
+      .eq('account_id', input.accountId)
+      .maybeSingle()
+    if (!automation || !(automation as Automation).is_active) {
+      // Paused or deleted while waiting: drop the wait and let the
+      // message go through the normal triggers instead.
+      await markPending(pending.id, 'expired')
+      await setLogError(pending.log_id, tErr('pausedWhileWaitingForReply'))
+      return false
+    }
+
+    const resumePoint = await resolveResumePoint(pending, pending.automation_id)
+    if (!resumePoint) {
+      await markPending(pending.id, 'expired')
+      await setLogError(pending.log_id, tErr('stepRemovedWhileWaiting'))
+      return false
+    }
+
+    await runResumed({
+      automation: automation as Automation,
+      contactId: pending.contact_id,
+      context: {
+        ...(pending.context ?? {}),
+        // Always overwrite all three, so a typed reply can't inherit a
+        // stale tap id from the message that started the run.
+        message_text: input.context.message_text ?? '',
+        conversation_id: input.context.conversation_id,
+        interactive_reply_id: input.context.interactive_reply_id,
+      },
+      ...resumePoint,
+      logId: pending.log_id,
+      triggerEvent: 'resumed_reply',
+    })
+    await markPending(pending.id, 'done')
+    return true
+  } catch (err) {
+    console.error('[automations] awaiting-reply resume failed:', err)
+    if (claimedId) {
+      // The message was already taken by the claim; report it consumed so
+      // it doesn't ALSO fan out to other automations.
+      await markPending(claimedId, 'failed').catch(() => {})
+      return true
+    }
+    return false
+  }
+}
+
+/**
+ * Close out `wait_for_reply` runs whose 24h deadline passed with no
+ * reply. Called from the automations cron. Nothing is sent to the
+ * customer; the log stays `partial` with an explanatory error_message.
+ * Returns how many runs expired.
+ */
+export async function expireAwaitingReplies(now: Date = new Date()): Promise<number> {
+  const db = supabaseAdmin()
+  const { data, error } = await db
+    .from('automation_pending_executions')
+    .update({ status: 'expired' })
+    .eq('status', 'awaiting_reply')
+    .lte('run_at', now.toISOString())
+    .select('id, log_id')
+  if (error) {
+    console.error('[automations] expire awaiting replies failed:', error)
+    return 0
+  }
+  const rows = (data ?? []) as { id: string; log_id: string | null }[]
+  for (const row of rows) {
+    await setLogError(row.log_id, tErr('noReplyWithin24h'))
+  }
+  return rows.length
+}
+
+interface PendingRow {
+  id: string
+  automation_id: string
+  contact_id: string | null
+  log_id: string | null
+  parent_step_id: string | null
+  branch: 'yes' | 'no' | null
+  next_step_position: number
+  parked_step_id?: string | null
+  context: AutomationContext | null
+}
+
+type ResumePoint = Pick<ExecuteArgs, 'parentStepId' | 'branch' | 'startPosition'>
+
+async function resolveResumePoint(
+  pending: Pick<PendingRow, 'parent_step_id' | 'branch' | 'next_step_position' | 'parked_step_id'>,
+  automationId: string,
+): Promise<ResumePoint | null> {
+  if (pending.parked_step_id) {
+    const { data: parkedStep, error } = await supabaseAdmin()
+      .from('automation_steps')
+      .select('id, parent_step_id, branch, position')
+      .eq('id', pending.parked_step_id)
+      .eq('automation_id', automationId)
+      .maybeSingle()
+    if (error) throw new Error(error.message)
+    if (!parkedStep) return null
+    const step = parkedStep as Pick<AutomationStep, 'parent_step_id' | 'branch' | 'position'>
+    return {
+      parentStepId: step.parent_step_id ?? null,
+      branch: step.parent_step_id ? (step.branch ?? 'yes') : null,
+      startPosition: step.position + 1,
+    }
+  }
+  if (pending.branch !== null && pending.parent_step_id === null) return null
+  return {
+    parentStepId: pending.parent_step_id,
+    branch: pending.branch,
+    startPosition: pending.next_step_position,
+  }
+}
+
+export const STALLED_CLAIM_MS = 15 * 60 * 1000
+
+export async function claimPendingExecution(id: string, now: Date = new Date()): Promise<boolean> {
+  const { data } = await supabaseAdmin()
+    .from('automation_pending_executions')
+    .update({ status: 'running', claimed_at: now.toISOString() })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+  return Boolean(data)
+}
+
+export async function requeueStalledExecutions(now: Date = new Date()): Promise<number> {
+  const { data, error } = await supabaseAdmin()
+    .from('automation_pending_executions')
+    .update({ status: 'pending', claimed_at: null })
+    .eq('status', 'running')
+    .lt('claimed_at', new Date(now.getTime() - STALLED_CLAIM_MS).toISOString())
+    .select('id')
+  if (error) {
+    console.error('[automations] requeue stalled executions failed:', error)
+    return 0
+  }
+  return (data ?? []).length
 }
 
 // ------------------------------------------------------------
@@ -134,11 +424,24 @@ async function executeAutomation(automation: Automation, input: DispatchInput) {
     .from('automation_logs')
     .insert({
       automation_id: automation.id,
+      // Tenancy: matches automation.account_id (NOT NULL post-017).
+      account_id: automation.account_id,
+      // Audit: keeps the historical "author of this automation"
+      // pointer so logs still attribute to the right user even
+      // after teammates join the account.
       user_id: automation.user_id,
       contact_id: input.contactId ?? null,
       trigger_event: input.triggerType,
       steps_executed: [],
-      status: 'success',
+      // Seeded pessimistically. The row is written BEFORE any step runs,
+      // and every terminal path below overwrites it (`appendResults` at
+      // the outermost scope, or `finalizeLog`). Seeding 'success' meant a
+      // run that died mid-flight — the process frozen, the pod recycled —
+      // left a permanent `status: 'success'` with `steps_executed: []`,
+      // indistinguishable from an automation that genuinely had nothing
+      // to do. 'failed' inverts that: the status only becomes success if
+      // execution actually reached the end. See issue #409.
+      status: 'failed',
     })
     .select()
     .single()
@@ -182,7 +485,14 @@ interface ExecuteArgs {
   triggerEvent: string
 }
 
-async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
+/**
+ * How a scope ended. `suspended` means a `wait` / `wait_for_reply` step
+ * parked the run: every enclosing scope must stop too, or the steps
+ * after a condition would run before the branch's own remaining steps.
+ */
+type ScopeOutcome = 'completed' | 'suspended' | 'failed'
+
+async function executeStepsFrom(args: ExecuteArgs): Promise<ScopeOutcome> {
   const db = supabaseAdmin()
 
   const baseQuery = db
@@ -201,13 +511,13 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
 
   if (stepsErr) {
     await finalizeLog(args.logId, 'failed', stepsErr.message)
-    return
+    return 'failed'
   }
   if (!steps || steps.length === 0) {
     if (args.parentStepId === null && args.logId) {
       await finalizeLog(args.logId, 'success', null)
     }
-    return
+    return 'completed'
   }
 
   const results: AutomationLogStepResult[] = []
@@ -220,27 +530,39 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
     if (step.step_type === 'wait') {
       const cfg = step.step_config as WaitStepConfig
       const ms = waitMs(cfg)
-      await db.from('automation_pending_executions').insert({
+      const { error: waitErr } = await db.from('automation_pending_executions').insert({
         automation_id: args.automation.id,
+        // Tenancy: account_id required NOT NULL post-017.
+        account_id: args.automation.account_id,
         user_id: args.automation.user_id,
         contact_id: args.contactId,
         log_id: args.logId,
         parent_step_id: args.parentStepId,
         branch: args.branch,
         next_step_position: step.position + 1,
+        parked_step_id: step.id,
         context: args.context,
         run_at: new Date(Date.now() + ms).toISOString(),
         status: 'pending',
       })
+      if (waitErr) {
+        errorMessage = tErr('scheduleWaitFailed', { message: waitErr.message })
+        results.push({
+          step_id: step.id,
+          step_type: step.step_type,
+          status: 'failed',
+          detail: errorMessage,
+        })
+        status = 'failed'
+        break
+      }
       results.push({
         step_id: step.id,
         step_type: step.step_type,
         status: 'success',
         detail: `waiting ${cfg.amount} ${cfg.unit}`,
       })
-      status = 'partial'
-      await appendResults(args.logId, results, status, errorMessage)
-      return
+      return suspend(args, results, errorMessage)
     }
 
     try {
@@ -255,17 +577,37 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
         })
         // Recurse into the chosen branch at position 0 (children use their
         // own ordering within the branch scope).
-        await executeStepsFrom({
+        const branchOutcome = await executeStepsFrom({
           ...args,
           parentStepId: step.id,
           branch: taken ? 'yes' : 'no',
           startPosition: 0,
           logId: args.logId,
         })
+        // The branch parked: stop here too. The steps after this
+        // condition run when the branch resumes and climbs back out
+        // (see runResumed).
+        if (branchOutcome === 'suspended') {
+          return suspend(args, results, errorMessage)
+        }
+        if (branchOutcome === 'failed') {
+          status = 'failed'
+          break
+        }
         continue
       }
 
       const detail = await runStep(step, args)
+      if (waitsForReply(step)) {
+        await parkForReply(step, args)
+        results.push({
+          step_id: step.id,
+          step_type: step.step_type,
+          status: 'success',
+          detail: `${detail}; waiting for reply`,
+        })
+        return suspend(args, results, errorMessage)
+      }
       results.push({
         step_id: step.id,
         step_type: step.step_type,
@@ -292,6 +634,102 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
     // Nested branch — just append results; parent scope decides final status.
     await appendResults(args.logId, results, null, errorMessage)
   }
+  return status === 'failed' ? 'failed' : 'completed'
+}
+
+/** Record a parked scope's results and report the suspension upward. */
+async function suspend(
+  args: ExecuteArgs,
+  results: AutomationLogStepResult[],
+  errorMessage: string | null,
+): Promise<ScopeOutcome> {
+  // Only the outermost scope owns the log status (same rule as below).
+  await appendResults(
+    args.logId,
+    results,
+    args.parentStepId === null ? 'partial' : null,
+    errorMessage,
+  )
+  return 'suspended'
+}
+
+/**
+ * Continue a parked run, then climb out of every enclosing condition
+ * branch. A run can park inside a branch; once that branch's remaining
+ * steps finish, execution has to carry on after the condition that owns
+ * it, in the condition's own scope, all the way back to the root.
+ */
+async function runResumed(args: ExecuteArgs): Promise<void> {
+  const db = supabaseAdmin()
+  let outcome = await executeStepsFrom(args)
+  let owner = args.parentStepId
+
+  while (outcome === 'completed' && owner !== null) {
+    const { data: cond } = await db
+      .from('automation_steps')
+      .select('id, parent_step_id, branch, position')
+      .eq('id', owner)
+      .eq('automation_id', args.automation.id)
+      .maybeSingle()
+    if (!cond) {
+      // The condition was deleted while the run was parked — nothing
+      // left to climb into. What did run, ran successfully.
+      await setLogStatus(args.logId, 'success')
+      return
+    }
+    const c = cond as Pick<AutomationStep, 'parent_step_id' | 'branch' | 'position'>
+    owner = c.parent_step_id ?? null
+    outcome = await executeStepsFrom({
+      ...args,
+      parentStepId: owner,
+      branch: c.branch ?? null,
+      startPosition: c.position + 1,
+    })
+  }
+
+  // A nested scope never sets the log status itself, so a failure there
+  // has to be promoted here or the log stays `partial` forever.
+  if (outcome === 'failed' && owner !== null) {
+    await setLogStatus(args.logId, 'failed')
+  }
+}
+
+function waitsForReply(step: AutomationStep): boolean {
+  if (step.step_type !== 'send_buttons' && step.step_type !== 'send_list') return false
+  return (step.step_config as SendButtonsStepConfig).wait_for_reply === true
+}
+
+/**
+ * Park the run after an interactive send until the contact replies.
+ * The newest menu wins: any other run already waiting on this contact
+ * is superseded, so a reply can never resume a stale menu.
+ */
+async function parkForReply(step: AutomationStep, args: ExecuteArgs): Promise<void> {
+  if (!args.contactId) throw new Error(tErr('needsContact', { step: step.step_type }))
+  const db = supabaseAdmin()
+  const { error: supErr } = await db
+    .from('automation_pending_executions')
+    .update({ status: 'superseded' })
+    .eq('account_id', args.automation.account_id)
+    .eq('contact_id', args.contactId)
+    .eq('status', 'awaiting_reply')
+  if (supErr) throw new Error(tErr('parkForReplyFailed', { message: supErr.message }))
+  const { error } = await db.from('automation_pending_executions').insert({
+    automation_id: args.automation.id,
+    account_id: args.automation.account_id,
+    user_id: args.automation.user_id,
+    contact_id: args.contactId,
+    log_id: args.logId,
+    parent_step_id: args.parentStepId,
+    branch: args.branch,
+    next_step_position: step.position + 1,
+    parked_step_id: step.id,
+    context: args.context,
+    // For awaiting_reply rows run_at is the reply deadline (migration 045).
+    run_at: new Date(Date.now() + REPLY_WAIT_MS).toISOString(),
+    status: 'awaiting_reply',
+  })
+  if (error) throw new Error(tErr('parkForReplyFailed', { message: error.message }))
 }
 
 async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string> {
@@ -300,11 +738,12 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
   switch (step.step_type) {
     case 'send_message': {
       const cfg = step.step_config as SendMessageStepConfig
-      if (!args.contactId) throw new Error('send_message needs a contact')
+      if (!args.contactId) throw new Error(tErr('needsContact', { step: 'send_message' }))
       const text = interpolate(cfg.text, args)
-      if (!text.trim()) throw new Error('send_message has empty text')
+      if (!text.trim()) throw new Error(tErr('emptyText'))
       const conversationId = await resolveConversationId(args)
       const { whatsapp_message_id } = await engineSendText({
+        accountId: args.automation.account_id,
         userId: args.automation.user_id,
         conversationId,
         contactId: args.contactId,
@@ -313,10 +752,30 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       return `sent via Meta (${whatsapp_message_id})`
     }
 
+    case 'send_buttons':
+    case 'send_list': {
+      const payload = step.step_config as SendButtonsStepConfig | SendListStepConfig
+      if (!args.contactId) throw new Error(tErr('needsContact', { step: step.step_type }))
+      // Validate against Meta's limits before the network call so a bad
+      // payload surfaces as a clear failed-step detail rather than a raw
+      // Meta 400 mid-conversation.
+      const check = validateInteractivePayload(payload)
+      if (!check.ok) throw new Error(check.error)
+      const conversationId = await resolveConversationId(args)
+      const { whatsapp_message_id } = await engineSendInteractive({
+        accountId: args.automation.account_id,
+        userId: args.automation.user_id,
+        conversationId,
+        contactId: args.contactId,
+        payload,
+      })
+      return `interactive sent via Meta (${whatsapp_message_id})`
+    }
+
     case 'send_template': {
       const cfg = step.step_config as SendTemplateStepConfig
-      if (!args.contactId) throw new Error('send_template needs a contact')
-      if (!cfg.template_name) throw new Error('send_template needs template_name')
+      if (!args.contactId) throw new Error(tErr('needsContact', { step: 'send_template' }))
+      if (!cfg.template_name) throw new Error(tErr('needsTemplateName'))
       const conversationId = await resolveConversationId(args)
       // Meta templates use positional {{1}}, {{2}}, … placeholders, so
       // we MUST emit params in strict numeric order. Lexicographic sort
@@ -337,6 +796,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
             .map((k) => String(cfg.variables![k]))
         : []
       const { whatsapp_message_id } = await engineSendTemplate({
+        accountId: args.automation.account_id,
         userId: args.automation.user_id,
         conversationId,
         contactId: args.contactId,
@@ -349,19 +809,46 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
 
     case 'add_tag': {
       const cfg = step.step_config as TagStepConfig
-      if (!args.contactId || !cfg.tag_id) throw new Error('add_tag needs contact + tag_id')
-      await db
-        .from('contact_tags')
-        .upsert(
-          { contact_id: args.contactId, tag_id: cfg.tag_id },
-          { onConflict: 'contact_id,tag_id', ignoreDuplicates: true },
-        )
-      return `tag ${cfg.tag_id} added`
+      if (!args.contactId || !cfg.tag_id) throw new Error(tErr('needsContactAndTag', { step: 'add_tag' }))
+      const added = await addContactTagIfAbsent(db, {
+        accountId: args.automation.account_id,
+        contactId: args.contactId,
+        tagId: cfg.tag_id,
+      })
+      if (!added) return `tag ${cfg.tag_id} already present`
+
+      const depth = getTagChainDepth(args.context)
+      if (depth >= MAX_TAG_CHAIN_DEPTH) {
+        console.warn('[automations] tag_added chain depth limit reached', {
+          automationId: args.automation.id,
+          contactId: args.contactId,
+          tagId: cfg.tag_id,
+          depth,
+        })
+        return `tag ${cfg.tag_id} added; tag_added dispatch skipped at depth ${depth}`
+      }
+
+      await runAutomationsForTrigger({
+        accountId: args.automation.account_id,
+        triggerType: 'tag_added',
+        contactId: args.contactId,
+        context: {
+          ...args.context,
+          tag_id: cfg.tag_id,
+          vars: {
+            ...(args.context.vars ?? {}),
+            _tag_chain_depth: depth + 1,
+          },
+        },
+      })
+      return `tag ${cfg.tag_id} added and tag_added dispatched`
     }
 
     case 'remove_tag': {
+      // See add_tag: tenant scoping relies on the runAutomationsForTrigger
+      // ownership guard, since contact_tags carries no account_id.
       const cfg = step.step_config as TagStepConfig
-      if (!args.contactId || !cfg.tag_id) throw new Error('remove_tag needs contact + tag_id')
+      if (!args.contactId || !cfg.tag_id) throw new Error(tErr('needsContactAndTag', { step: 'remove_tag' }))
       await db
         .from('contact_tags')
         .delete()
@@ -372,13 +859,16 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
 
     case 'assign_conversation': {
       const cfg = step.step_config as AssignConversationStepConfig
-      if (!args.contactId) throw new Error('assign_conversation needs a contact')
+      if (!args.contactId) throw new Error(tErr('needsContact', { step: 'assign_conversation' }))
       let agentId = cfg.agent_id
       if (cfg.mode === 'round_robin') {
+        // Pick any member of the account. The existing implementation
+        // only ever returned the automation's author; preserving that
+        // shape until a real round-robin algorithm replaces it.
         const { data: profiles } = await db
           .from('profiles')
           .select('user_id')
-          .eq('user_id', args.automation.user_id)
+          .eq('account_id', args.automation.account_id)
           .limit(1)
         agentId = profiles?.[0]?.user_id
       }
@@ -386,35 +876,86 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       await db
         .from('conversations')
         .update({ assigned_agent_id: agentId })
-        .eq('user_id', args.automation.user_id)
+        .eq('account_id', args.automation.account_id)
         .eq('contact_id', args.contactId)
       return `assigned to ${agentId}`
     }
 
     case 'update_contact_field': {
       const cfg = step.step_config as UpdateContactFieldStepConfig
-      if (!args.contactId) throw new Error('update_contact_field needs a contact')
+      if (!args.contactId) throw new Error(tErr('needsContact', { step: 'update_contact_field' }))
+      // Resolve workflow variables ({{ vars.* }}, {{ message.text }}) so custom
+      // values can be populated dynamically from the triggering context.
+      const value = interpolate(cfg.value, args)
+
+      // Custom fields are encoded as `custom:<custom_field_id>`; anything else
+      // is a built-in contact column.
+      if (cfg.field.startsWith('custom:')) {
+        const customFieldId = cfg.field.slice('custom:'.length)
+        if (!customFieldId) {
+          return `field ${cfg.field} not writable from automations`
+        }
+        // Defense in depth: the service-role client bypasses RLS, so confirm
+        // the field definition belongs to this account before writing.
+        const { data: field } = await db
+          .from('custom_fields')
+          .select('id')
+          .eq('id', customFieldId)
+          .eq('account_id', args.automation.account_id)
+          .maybeSingle()
+        if (!field) {
+          return `field ${cfg.field} not writable from automations`
+        }
+        // Upsert on the table's UNIQUE(contact_id, custom_field_id) so repeated
+        // runs overwrite rather than duplicate. Tenancy is enforced above and,
+        // for the contact side, by the entry-point ownership guard.
+        await db
+          .from('contact_custom_values')
+          .upsert(
+            { contact_id: args.contactId, custom_field_id: customFieldId, value },
+            { onConflict: 'contact_id,custom_field_id' },
+          )
+        return `custom field updated`
+      }
+
       const allowed = new Set(['name', 'email', 'company'])
       if (!allowed.has(cfg.field)) {
         return `field ${cfg.field} not writable from automations`
       }
+      // Defense in depth: scope the service-role write to the account so
+      // a future caller that skips the entry-point ownership guard still
+      // cannot write across tenants.
       await db
         .from('contacts')
-        .update({ [cfg.field]: cfg.value, updated_at: new Date().toISOString() })
+        .update({ [cfg.field]: value, updated_at: new Date().toISOString() })
         .eq('id', args.contactId)
+        .eq('account_id', args.automation.account_id)
       return `${cfg.field} updated`
     }
 
     case 'create_deal': {
       const cfg = step.step_config as CreateDealStepConfig
-      if (!cfg.pipeline_id || !cfg.stage_id) throw new Error('create_deal needs pipeline + stage')
+      if (!cfg.pipeline_id || !cfg.stage_id) throw new Error(tErr('needsPipelineStage'))
+      // Match the account's configured default currency rather than
+      // the static `deals.currency` DB default — keeps automation-
+      // created deals consistent with the one-currency-per-account
+      // rule (issue #218). Fall back to USD if the row is somehow
+      // missing the value (pre-021 forks).
+      const { data: acct } = await db
+        .from('accounts')
+        .select('default_currency')
+        .eq('id', args.automation.account_id)
+        .maybeSingle()
       await db.from('deals').insert({
+        // Tenancy + audit, same split as automation_logs above.
+        account_id: args.automation.account_id,
         user_id: args.automation.user_id,
         pipeline_id: cfg.pipeline_id,
         stage_id: cfg.stage_id,
         contact_id: args.contactId,
         title: interpolate(cfg.title, args),
         value: cfg.value ?? 0,
+        currency: acct?.default_currency ?? 'USD',
         status: 'open',
       })
       return 'deal created'
@@ -422,23 +963,35 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
 
     case 'send_webhook': {
       const cfg = step.step_config as SendWebhookStepConfig
-      if (!cfg.url) throw new Error('send_webhook needs url')
+      if (!cfg.url) throw new Error(tErr('needsUrl'))
+      // SSRF guard: the URL and headers are account-controlled and the
+      // server makes the request, so refuse any destination that resolves
+      // to a private / loopback / link-local / reserved address. Mirrors
+      // the webhook_endpoints delivery path (see lib/webhooks/deliver.ts).
+      if (!(await isDeliverableUrl(cfg.url))) {
+        throw new Error(tErr('destinationNotAllowed'))
+      }
       const body = cfg.body_template ? interpolate(cfg.body_template, args) : JSON.stringify(args.context)
       const res = await fetch(cfg.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(cfg.headers ?? {}) },
         body,
+        // Do NOT follow redirects — a public URL could 3xx-bounce to an
+        // internal address, defeating the guard above. Bound the request
+        // so a hung/slow internal host can't tie up the runner.
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10_000),
       })
-      if (!res.ok) throw new Error(`webhook returned ${res.status}`)
+      if (!res.ok) throw new Error(tErr('webhookStatus', { status: String(res.status) }))
       return `webhook ${res.status}`
     }
 
     case 'close_conversation': {
-      if (!args.contactId) throw new Error('close_conversation needs a contact')
+      if (!args.contactId) throw new Error(tErr('needsContact', { step: 'close_conversation' }))
       await db
         .from('conversations')
         .update({ status: 'closed', updated_at: new Date().toISOString() })
-        .eq('user_id', args.automation.user_id)
+        .eq('account_id', args.automation.account_id)
         .eq('contact_id', args.contactId)
       return 'conversation closed'
     }
@@ -461,30 +1014,113 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
  */
 async function resolveConversationId(args: ExecuteArgs): Promise<string> {
   const fromCtx = args.context.conversation_id
-  if (fromCtx) return fromCtx
-  if (!args.contactId) throw new Error('cannot resolve conversation: no contact')
+  if (fromCtx) {
+    // Re-verify rather than trust the context. Dispatch already checks
+    // a caller-supplied id, but a resumed run replays a context that
+    // was persisted rows ago, and this is the last point before a
+    // service-role write keyed on it (GHSA-m4fx-g6pr-hrw8).
+    const { data, error } = await supabaseAdmin()
+      .from('conversations')
+      .select('id')
+      .eq('id', fromCtx)
+      .eq('account_id', args.automation.account_id)
+      .maybeSingle()
+    if (error) throw new Error(getT('LibErrors.send')('conversationLookupFailed', { message: error.message }))
+    if (!data?.id) throw new Error(tErr('conversationNotInAccount'))
+    return data.id as string
+  }
+  if (!args.contactId) throw new Error(tErr('noContactForConversation'))
   const { data, error } = await supabaseAdmin()
     .from('conversations')
     .select('id')
-    .eq('user_id', args.automation.user_id)
+    .eq('account_id', args.automation.account_id)
     .eq('contact_id', args.contactId)
     .maybeSingle()
-  if (error) throw new Error(`conversation lookup failed: ${error.message}`)
-  if (!data?.id) throw new Error('no conversation for contact')
+  if (error) throw new Error(getT('LibErrors.send')('conversationLookupFailed', { message: error.message }))
+  if (!data?.id) {
+    throw new Error(
+      tErr(args.triggerEvent === 'tag_added' ? 'tagAddedNoConversation' : 'noConversation'),
+    )
+  }
   return data.id as string
 }
 
-function triggerMatches(automation: Automation, ctx: AutomationContext | undefined): boolean {
-  if (automation.trigger_type !== 'keyword_match') return true
-  const cfg = automation.trigger_config as KeywordMatchTriggerConfig
-  if (!cfg?.keywords || cfg.keywords.length === 0) return false
-  const text = (ctx?.message_text ?? '').toString()
-  if (!text) return false
-  const haystack = cfg.case_sensitive ? text : text.toLowerCase()
-  return cfg.keywords.some((raw) => {
-    const k = cfg.case_sensitive ? raw : raw.toLowerCase()
-    return cfg.match_type === 'exact' ? haystack === k : haystack.includes(k)
-  })
+/** Letter, digit or underscore in any script — the "inside a word" test. */
+const WORD_CHAR = '[\\p{L}\\p{N}_]'
+
+/**
+ * Whole-word keyword test, behind `match_type: 'word'` (issue #409 — a
+ * one-letter keyword under `contains` fires on every message containing
+ * that letter, e.g. "k" on "thanks").
+ *
+ * Deliberately NOT `\b`, which is defined against `[A-Za-z0-9_]` and so
+ * breaks two cases that matter for WhatsApp traffic:
+ *
+ *   - A keyword carrying punctuation: `/\bhi!\b/` demands a word character
+ *     after the "!", so it never matches "say hi!".
+ *   - Any non-Latin script: every character of "안녕" is a non-word
+ *     character to `\b`, so `/\b안녕\b/` matches nothing at all.
+ *
+ * Unicode-aware lookarounds handle both. Note this really is word-based:
+ * it won't find "안녕" inside "안녕하세요", because a language that doesn't
+ * delimit words with spaces has no word edge there. That's what `contains`
+ * is for, and it stays the default.
+ *
+ * Exported for direct unit testing of the escaping / boundary edges.
+ */
+export function matchesWholeWord(
+  text: string,
+  keyword: string,
+  caseSensitive = false,
+): boolean {
+  if (!keyword) return false
+  // The keyword is account-supplied free text, so metacharacters have to
+  // be literal — otherwise "(" is an unterminated group and RegExp throws.
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(
+    `(?<!${WORD_CHAR})${escaped}(?!${WORD_CHAR})`,
+    caseSensitive ? 'u' : 'iu',
+  )
+  return pattern.test(text)
+}
+
+export function triggerMatches(automation: Automation, ctx: AutomationContext | undefined): boolean {
+  if (automation.trigger_type === 'keyword_match') {
+    const cfg = automation.trigger_config as KeywordMatchTriggerConfig
+    if (!cfg?.keywords || cfg.keywords.length === 0) return false
+    const text = (ctx?.message_text ?? '').toString()
+    if (!text) return false
+    if (cfg.match_type === 'word') {
+      return cfg.keywords.some((raw) =>
+        matchesWholeWord(text, raw, cfg.case_sensitive),
+      )
+    }
+    const haystack = cfg.case_sensitive ? text : text.toLowerCase()
+    return cfg.keywords.some((raw) => {
+      const k = cfg.case_sensitive ? raw : raw.toLowerCase()
+      return cfg.match_type === 'exact' ? haystack === k : haystack.includes(k)
+    })
+  }
+
+  // Match on the tapped button / list-row id (exact). Lets multi-step
+  // menus be chained: automation A sends buttons, automation B fires on
+  // the reply id and sends the next step.
+  if (automation.trigger_type === 'interactive_reply') {
+    const cfg = automation.trigger_config as InteractiveReplyTriggerConfig
+    const replyId = ctx?.interactive_reply_id
+    if (!replyId || !Array.isArray(cfg?.reply_ids) || cfg.reply_ids.length === 0) {
+      return false
+    }
+    return cfg.reply_ids.includes(replyId)
+  }
+
+  if (automation.trigger_type === 'tag_added') {
+    const cfg = automation.trigger_config as TagTriggerConfig
+    const tagId = ctx?.tag_id
+    return Boolean(tagId && cfg?.tag_id && cfg.tag_id === tagId)
+  }
+
+  return true
 }
 
 async function evaluateCondition(cfg: ConditionStepConfig, args: ExecuteArgs): Promise<boolean> {
@@ -492,6 +1128,9 @@ async function evaluateCondition(cfg: ConditionStepConfig, args: ExecuteArgs): P
   switch (cfg.subject) {
     case 'tag_presence': {
       if (!args.contactId || !cfg.operand) return false
+      // contact_tags has no account_id column (its RLS keys off the parent
+      // contact), so tenant scoping here relies on the contact-ownership
+      // guard in runAutomationsForTrigger.
       const { count } = await db
         .from('contact_tags')
         .select('id', { count: 'exact', head: true })
@@ -500,34 +1139,26 @@ async function evaluateCondition(cfg: ConditionStepConfig, args: ExecuteArgs): P
       return (count ?? 0) > 0
     }
     case 'contact_field': {
-      if (!args.contactId || !cfg.operand) return false
+      if (!args.contactId || !cfg.operand || !(cfg.value ?? '').trim()) return false
+      // Scope to the account so the condition can't be turned into a
+      // cross-tenant read oracle via the service-role client.
       const { data } = await db
         .from('contacts')
         .select(cfg.operand)
         .eq('id', args.contactId)
+        .eq('account_id', args.automation.account_id)
         .maybeSingle()
       const v = (data as Record<string, unknown> | null)?.[cfg.operand]
-      return v != null && String(v) === String(cfg.value ?? '')
+      return v != null && String(v) === String(cfg.value)
     }
     case 'message_content': {
+      const needle = (cfg.value ?? '').trim().toLowerCase()
+      if (!needle) return false
       const text = (args.context.message_text ?? '').toString()
-      return text.toLowerCase().includes((cfg.value ?? '').toLowerCase())
+      return text.toLowerCase().includes(needle)
     }
-    case 'time_of_day': {
-      // operand form "HH:mm-HH:mm" — true if now is within that window
-      // (supports over-midnight ranges like "18:00-09:00").
-      const [from, to] = (cfg.operand ?? '').split('-')
-      if (!from || !to) return false
-      const now = new Date()
-      const mins = now.getHours() * 60 + now.getMinutes()
-      const parse = (s: string) => {
-        const [h, m] = s.split(':').map(Number)
-        return (h || 0) * 60 + (m || 0)
-      }
-      const f = parse(from)
-      const t = parse(to)
-      return f <= t ? mins >= f && mins < t : mins >= f || mins < t
-    }
+    case 'time_of_day':
+      return isWithinTimeWindow(cfg.operand, new Date(), cfg.timezone)
     default:
       return false
   }
@@ -585,7 +1216,25 @@ async function finalizeLog(
     .eq('id', logId)
 }
 
-async function markPending(id: string, status: 'done' | 'failed') {
+/** Status-only update, for when error_message must be left as it is. */
+async function setLogStatus(
+  logId: string | null,
+  status: 'success' | 'partial' | 'failed',
+) {
+  if (!logId) return
+  await supabaseAdmin().from('automation_logs').update({ status }).eq('id', logId)
+}
+
+/** Explain why a parked run ended without touching its status. */
+async function setLogError(logId: string | null, errorMessage: string) {
+  if (!logId) return
+  await supabaseAdmin()
+    .from('automation_logs')
+    .update({ error_message: errorMessage })
+    .eq('id', logId)
+}
+
+async function markPending(id: string, status: 'done' | 'failed' | 'expired') {
   await supabaseAdmin()
     .from('automation_pending_executions')
     .update({ status })
