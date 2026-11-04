@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
-import { Bot, RotateCcw, Send, Loader2, UserCircle2, ArrowRight } from 'lucide-react';
+import {
+  ArrowRight,
+  Bot,
+  CalendarClock,
+  Loader2,
+  RotateCcw,
+  Send,
+  UserCircle2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
@@ -12,6 +20,18 @@ interface Turn {
   content: string;
   /** assistant-only: the agent signalled a human handoff on this turn. */
   handoff?: boolean;
+  /** assistant-only: what would be recorded for a real customer. */
+  booking?: BookingPreview | null;
+  /** assistant-only: the agent tried to record a booking but it was unreadable. */
+  bookingMalformed?: boolean;
+}
+
+interface BookingPreview {
+  type: string;
+  action: 'save' | 'cancel';
+  fields: Record<string, string>;
+  scheduledLocal: string | null;
+  scheduledText: string | null;
 }
 
 export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
@@ -63,6 +83,8 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
               ? data.reply
               : '',
           handoff: Boolean(data.handoff),
+          booking: data.booking ?? null,
+          bookingMalformed: Boolean(data.booking_malformed),
         },
       ]);
     } catch {
@@ -155,6 +177,33 @@ export function AiPlayground({ onGoToSetup }: { onGoToSetup?: () => void }) {
                   <UserCircle2 className="h-3.5 w-3.5" />
                   {t('handoff')}
                 </p>
+              )}
+              {turn.role === 'assistant' && turn.bookingMalformed && (
+                <p className="mt-1.5 border-t border-border/50 pt-1.5 text-xs text-destructive">
+                  {t('bookingMalformed')}
+                </p>
+              )}
+              {turn.role === 'assistant' && turn.booking && (
+                <div className="mt-1.5 space-y-0.5 border-t border-border/50 pt-1.5 text-xs text-muted-foreground">
+                  <p className="flex items-center gap-1 font-medium text-primary">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    {t(turn.booking.action === 'cancel' ? 'bookingCancelPreview' : 'bookingPreview', {
+                      type: turn.booking.type,
+                    })}
+                  </p>
+                  {Object.entries(turn.booking.fields).map(([key, value]) => (
+                    <p key={key}>
+                      {key}: {value}
+                    </p>
+                  ))}
+                  {(turn.booking.scheduledLocal || turn.booking.scheduledText) && (
+                    <p>
+                      {[turn.booking.scheduledLocal, turn.booking.scheduledText]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
             {turn.role === 'user' && (

@@ -191,6 +191,8 @@ export const RATE_LIMITS = {
    *  capping a stampede; excess inbounds simply don't get an auto-reply
    *  (they still land in the inbox for a human). */
   aiAutoReplyAccount: { limit: 30, windowMs: 60_000 },
+  /** Per conversation: reading along in agent chats spends the same key. */
+  bookingCapture: { limit: 6, windowMs: 60_000 },
   whatsappAdmin: { limit: 30, windowMs: 60_000 },
   whatsappHealth: { limit: 30, windowMs: 60_000 },
   whatsappMedia: { limit: 240, windowMs: 60_000 },

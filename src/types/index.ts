@@ -201,7 +201,10 @@ export interface Conversation {
 // Notifications (migration 027)
 // ============================================================
 
-export type NotificationType = 'conversation_assigned';
+export type NotificationType =
+  | 'conversation_assigned'
+  | 'booking_assigned'
+  | 'booking_reminder';
 
 export interface Notification {
   id: string;
@@ -211,6 +214,8 @@ export interface Notification {
   type: NotificationType;
   conversation_id?: string;
   contact_id?: string;
+  /** Set for booking notifications (migration 063). */
+  booking_id?: string;
   /** Who triggered it. Null when an automation/system assigned it. */
   actor_user_id?: string;
   title: string;

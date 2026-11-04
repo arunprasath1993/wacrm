@@ -8,6 +8,7 @@ import {
   resumePendingExecution,
 } from '@/lib/automations/engine'
 import type { AutomationContext } from '@/lib/automations/engine'
+import { sendDueBookingReminders } from '@/lib/bookings/reminders'
 
 /**
  * Drain due `automation_pending_executions` rows. Meant to be hit
@@ -42,6 +43,10 @@ export async function GET(request: Request) {
   const requeued = await requeueStalledExecutions()
 
   const admin = supabaseAdmin()
+  // Shares this schedule so bookings need no cron of their own. Never
+  // throws, so it can't hold up the automations below.
+  const reminders = await sendDueBookingReminders(admin)
+
   const { data: due, error } = await admin
     .from('automation_pending_executions')
     .select('*')
@@ -51,7 +56,9 @@ export async function GET(request: Request) {
     .limit(50)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!due || due.length === 0) return NextResponse.json({ processed: 0, expired, requeued })
+  if (!due || due.length === 0) {
+    return NextResponse.json({ processed: 0, expired, requeued, reminders })
+  }
 
   let processed = 0
   for (const row of due) {
@@ -75,5 +82,5 @@ export async function GET(request: Request) {
     processed++
   }
 
-  return NextResponse.json({ processed, expired, requeued })
+  return NextResponse.json({ processed, expired, requeued, reminders })
 }

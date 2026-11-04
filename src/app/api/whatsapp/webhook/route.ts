@@ -22,6 +22,7 @@ import { readCappedBody } from '@/lib/whatsapp/webhook-body'
 import { resumeAwaitingReply, runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
+import { captureBookingFromChat } from '@/lib/bookings/capture'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
 import {
   applyBroadcastRecipientStatus,
@@ -913,6 +914,13 @@ async function processMessage(
       // Lets the bot show "typing…" (and mark the message read) while
       // the reply is generated.
       inboundMessageId: message.id,
+    })
+    // Where the bot isn't running this chat a human is, and what they
+    // agree still needs recording. Never throws.
+    await captureBookingFromChat({
+      accountId,
+      conversationId: conversation.id,
+      noteUserId: configOwnerUserId,
     })
   }
 

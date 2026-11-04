@@ -52,8 +52,23 @@ export function zonedLastNDayKeys(n: number, timeZone: string, now: Date = new D
 }
 
 export function zonedDayStart(dayKey: string, timeZone: string): Date {
-  const [y, m, d] = dayKey.split('-').map(Number)
-  const wallClockAsUtc = Date.UTC(y, m - 1, d)
+  const [year, month, day] = dayKey.split('-').map(Number)
+  return zonedTimeToUtc({ year, month, day }, timeZone)
+}
+
+export function zonedTimeToUtc(
+  wall: {
+    year: number
+    month: number
+    day: number
+    hour?: number
+    minute?: number
+    second?: number
+  },
+  timeZone: string,
+): Date {
+  const { year, month, day, hour = 0, minute = 0, second = 0 } = wall
+  const wallClockAsUtc = Date.UTC(year, month - 1, day, hour, minute, second)
   const firstGuess = wallClockAsUtc - offsetMs(new Date(wallClockAsUtc), timeZone)
   return new Date(wallClockAsUtc - offsetMs(new Date(firstGuess), timeZone))
 }

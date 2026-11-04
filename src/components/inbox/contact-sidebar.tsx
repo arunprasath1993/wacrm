@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ContactBookings } from "@/components/bookings/contact-bookings";
 import { format } from "date-fns";
 import { useTranslations } from "next-intl";
 import { contactHandle } from "@/lib/whatsapp/wa-identity";
@@ -259,6 +260,8 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
           {/* Divider */}
           <div className="my-4 border-t border-border" />
+
+          <ContactBookings contact={contact} />
 
           {/* Notes */}
           <div>

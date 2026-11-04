@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { ContactBookings } from '@/components/bookings/contact-bookings';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -590,6 +591,9 @@ export function ContactDetailView({
 
               {/* Notes Tab */}
               <TabsContent value="notes" className="flex-1 flex flex-col min-h-0 px-4 py-3">
+                <div className="mb-3 empty:hidden">
+                  {contactId && <ContactBookings contact={{ id: contactId }} />}
+                </div>
                 <div className="space-y-2 mb-3">
                   <Textarea
                     value={newNote}

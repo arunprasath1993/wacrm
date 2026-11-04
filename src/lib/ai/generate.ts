@@ -10,6 +10,7 @@ import { generateOpenAi } from './providers/openai'
 import { generateOpenAiCompatible } from './providers/openai-compatible'
 import { generateAnthropic } from './providers/anthropic'
 import { toWhatsAppFormatting } from './whatsapp-format'
+import { extractBookingMarker } from '@/lib/bookings/marker'
 
 export interface GenerateArgs {
   config: AiConfig
@@ -58,18 +59,22 @@ export async function generateReply(args: GenerateArgs): Promise<GenerateResult>
 }
 
 /**
- * Split the raw model output into `{ text, handoff, usage }`. The
- * sentinel can appear alone or trailing a partial reply; either way we
- * treat the turn as a handoff and strip the marker from any remaining
- * text. Markdown the model slipped in is converted to WhatsApp
- * formatting. `usage` is passed straight through (null when the provider
- * didn't report it).
+ * Split the raw model output into `{ text, handoff, usage, booking }`.
+ * The sentinel can appear alone or trailing a partial reply; either way
+ * we treat the turn as a handoff and strip the marker from any remaining
+ * text. The booking marker is stripped in every mode, so it can't reach
+ * a customer or an agent's composer. Markdown the model slipped in is
+ * converted to WhatsApp formatting. `usage` is passed straight through
+ * (null when the provider didn't report it).
  */
 export function parseGeneration(
   raw: string,
   usage: AiUsage | null = null,
 ): GenerateResult {
   const handoff = raw.includes(HANDOFF_SENTINEL)
-  const text = toWhatsAppFormatting(raw.split(HANDOFF_SENTINEL).join('').trim())
-  return { text, handoff, usage }
+  const { text: withoutBooking, marker, malformed } = extractBookingMarker(raw)
+  const text = toWhatsAppFormatting(
+    withoutBooking.split(HANDOFF_SENTINEL).join('').trim(),
+  )
+  return { text, handoff, usage, booking: marker, bookingMalformed: malformed }
 }

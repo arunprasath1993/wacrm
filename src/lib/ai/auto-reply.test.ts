@@ -10,6 +10,11 @@ const h = vi.hoisted(() => ({
   engineSendText: vi.fn(),
   loadAccountMetaCredentials: vi.fn(),
   sendTypingIndicator: vi.fn(),
+  loadBookingContext: vi.fn(),
+  loadCustomerMemory: vi.fn(),
+  saveBookingFromAi: vi.fn(),
+  loadAvailability: vi.fn(),
+  extractBookingFromChat: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
@@ -30,6 +35,13 @@ vi.mock('@/lib/flows/meta-send', () => ({
 }))
 vi.mock('@/lib/whatsapp/meta-api', () => ({
   sendTypingIndicator: h.sendTypingIndicator,
+}))
+vi.mock('@/lib/bookings/load', () => ({ loadBookingContext: h.loadBookingContext }))
+vi.mock('@/lib/bookings/memory', () => ({ loadCustomerMemory: h.loadCustomerMemory }))
+vi.mock('@/lib/bookings/save', () => ({ saveBookingFromAi: h.saveBookingFromAi }))
+vi.mock('@/lib/bookings/slots', () => ({ loadAvailability: h.loadAvailability }))
+vi.mock('@/lib/bookings/capture', () => ({
+  extractBookingFromChat: h.extractBookingFromChat,
 }))
 vi.mock('./admin-client', () => ({
   supabaseAdmin: () => ({
@@ -77,6 +89,7 @@ vi.mock('./admin-client', () => ({
 }))
 
 import { dispatchInboundToAiReply } from './auto-reply'
+import { __resetRateLimitForTests } from '@/lib/rate-limit'
 
 const ARGS = {
   accountId: 'acct-1',
@@ -123,6 +136,387 @@ beforeEach(() => {
     accessToken: 'tok',
   })
   h.sendTypingIndicator.mockResolvedValue(undefined)
+  h.loadBookingContext.mockResolvedValue({ types: [], timeZone: null })
+  h.loadCustomerMemory.mockResolvedValue(null)
+  __resetRateLimitForTests()
+  h.saveBookingFromAi.mockReset()
+  h.generateReply.mockReset()
+  h.generateReply.mockResolvedValue({ text: 'Hello!', handoff: false })
+  h.loadAvailability.mockResolvedValue({})
+  h.extractBookingFromChat.mockReset()
+  h.extractBookingFromChat.mockResolvedValue({ booking: null, usage: null })
+})
+
+describe('dispatchInboundToAiReply — bookings', () => {
+  const TYPE = {
+    id: 'type-1',
+    key: 'online_demo',
+    name: 'Online Demo',
+    fields: [],
+    time_mode: 'required',
+    duration_minutes: 30,
+    instructions: null,
+    assignee_user_id: 'agent-1',
+    handoff_on_confirm: false,
+    remind_minutes_before: 60,
+    slot_capacity: 1,
+    available_days: [1, 2, 3, 4, 5, 6],
+    available_from: '09:00',
+    available_to: '18:00',
+  }
+  const MARKER = {
+    type: 'online_demo',
+    action: 'save',
+    fields: { name: 'Ramu' },
+    scheduledLocal: '2026-11-01T11:00',
+    scheduledText: 'Tomorrow at 11 AM',
+  }
+
+  function saved(overrides: Record<string, unknown> = {}) {
+    return {
+      ok: true,
+      outcome: 'created',
+      booking: { id: 'b1', assigned_to: 'agent-1' },
+      type: TYPE,
+      ...overrides,
+    }
+  }
+
+  beforeEach(() => {
+    h.loadBookingContext.mockResolvedValue({ types: [TYPE], timeZone: 'UTC' })
+    h.generateReply.mockResolvedValue({
+      text: 'Confirmed!',
+      handoff: false,
+      booking: MARKER,
+      bookingMalformed: false,
+    })
+    h.saveBookingFromAi.mockResolvedValue(saved())
+  })
+
+  it('saves the booking and sends the reply', async () => {
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.saveBookingFromAi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 'acct-1',
+        contactId: 'contact-1',
+        conversationId: 'conv-1',
+        ownerUserId: 'user-1',
+        timeZone: 'UTC',
+        marker: MARKER,
+      }),
+    )
+    expect(h.engineSendText).toHaveBeenCalledWith(
+      expect.objectContaining({ text: 'Confirmed!' }),
+    )
+  })
+
+  it('does not call the save path for an ordinary reply', async () => {
+    h.generateReply.mockResolvedValue({ text: 'Hello!', handoff: false })
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.saveBookingFromAi).not.toHaveBeenCalled()
+  })
+
+  it('never tells the customer it is booked when the save failed', async () => {
+    h.saveBookingFromAi.mockResolvedValue({ ok: false })
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
+  })
+
+  it('hands off when the marker could not be read', async () => {
+    h.generateReply.mockResolvedValue({
+      text: 'Confirmed!',
+      handoff: false,
+      booking: null,
+      bookingMalformed: true,
+    })
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.saveBookingFromAi).not.toHaveBeenCalled()
+    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
+  })
+
+  it('keeps the lead when the reply slot is lost', async () => {
+    h.state.claim = false
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.saveBookingFromAi).toHaveBeenCalledTimes(1)
+    expect(h.engineSendText).not.toHaveBeenCalled()
+  })
+
+  it('keeps the lead when a newer inbound supersedes the reply', async () => {
+    h.state.latestInbound = [{ message_id: 'wamid.inbound-2' }]
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.saveBookingFromAi).toHaveBeenCalledTimes(1)
+    expect(h.engineSendText).not.toHaveBeenCalled()
+  })
+
+  it('keeps the lead when the model also asks for a human', async () => {
+    h.generateReply.mockResolvedValue({
+      text: '',
+      handoff: true,
+      booking: MARKER,
+      bookingMalformed: false,
+    })
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.saveBookingFromAi).toHaveBeenCalledTimes(1)
+    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
+  })
+
+  it('still confirms to the customer when the model sent only the marker', async () => {
+    h.generateReply.mockResolvedValue({
+      text: '',
+      handoff: false,
+      booking: MARKER,
+      bookingMalformed: false,
+    })
+    await dispatchInboundToAiReply(ARGS)
+
+    const sent = h.engineSendText.mock.calls[0][0].text as string
+    expect(sent.trim()).not.toBe('')
+    expect(h.state.updatePayload).toBeNull()
+  })
+
+  it('keeps the bot in the chat by default', async () => {
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.state.updatePayload).toBeNull()
+  })
+
+  it('assigns the chat after confirming when the type asks for it', async () => {
+    h.saveBookingFromAi.mockResolvedValue(
+      saved({ type: { ...TYPE, handoff_on_confirm: true } }),
+    )
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.engineSendText).toHaveBeenCalledTimes(1)
+    expect(h.state.updatePayload).toEqual({ assigned_agent_id: 'agent-1' })
+  })
+
+  it('does not assign the chat for an unchanged repeat', async () => {
+    h.saveBookingFromAi.mockResolvedValue(
+      saved({ outcome: 'unchanged', type: { ...TYPE, handoff_on_confirm: true } }),
+    )
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.state.updatePayload).toBeNull()
+  })
+
+  it('gives the model the date, the booking types and the customer memory', async () => {
+    h.loadCustomerMemory.mockResolvedValue({
+      name: 'Ramu',
+      company: null,
+      bookings: [],
+    })
+    await dispatchInboundToAiReply(ARGS)
+
+    const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    expect(prompt).toContain('Current date and time')
+    expect(prompt).toContain('"online_demo"')
+    expect(prompt).toContain('Ramu')
+  })
+
+  it('offers the model only the free times', async () => {
+    h.loadAvailability.mockResolvedValue({ online_demo: ['Mon, 2 Nov, 9:00 am'] })
+    await dispatchInboundToAiReply(ARGS)
+
+    const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    expect(prompt).toContain('Mon, 2 Nov, 9:00 am')
+  })
+
+  describe('when the reply carries no marker', () => {
+    const plain = (text: string, bookingMalformed = false) => ({
+      text,
+      handoff: false,
+      booking: null,
+      bookingMalformed,
+    })
+
+    it('extracts the booking before anything is sent', async () => {
+      h.generateReply.mockResolvedValue(plain('Your installation is confirmed!'))
+      h.extractBookingFromChat.mockImplementation(async () => {
+        expect(h.engineSendText).not.toHaveBeenCalled()
+        return { booking: MARKER, usage: null }
+      })
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.saveBookingFromAi).toHaveBeenCalledWith(
+        expect.objectContaining({ marker: MARKER }),
+      )
+      expect(h.engineSendText).toHaveBeenCalledTimes(1)
+    })
+
+    it('gives the extraction the reply it is checking', async () => {
+      h.generateReply.mockResolvedValue(plain('Confirmed!'))
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.extractBookingFromChat).toHaveBeenCalledWith(
+        expect.objectContaining({ draftReply: 'Confirmed!' }),
+      )
+    })
+
+    it('does not send a confirmation for a slot that is gone', async () => {
+      h.generateReply
+        .mockResolvedValueOnce(plain('Confirmed for 11!'))
+        .mockResolvedValueOnce(plain('That time is taken. Is 12 ok?'))
+      h.extractBookingFromChat.mockResolvedValue({ booking: MARKER, usage: null })
+      h.saveBookingFromAi.mockResolvedValue({
+        ok: true,
+        outcome: 'needs_followup',
+        instruction: 'System note: taken.',
+        booking: null,
+        type: TYPE,
+      })
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.engineSendText).toHaveBeenCalledTimes(1)
+      expect(h.engineSendText).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'That time is taken. Is 12 ok?' }),
+      )
+    })
+
+    it('sends the reply as written when nothing was booked', async () => {
+      h.generateReply.mockResolvedValue(plain('We open at 9.'))
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.saveBookingFromAi).not.toHaveBeenCalled()
+      expect(h.engineSendText).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'We open at 9.' }),
+      )
+    })
+
+    it('rescues an unreadable marker', async () => {
+      h.generateReply.mockResolvedValue(plain('Confirmed!', true))
+      h.extractBookingFromChat.mockResolvedValue({ booking: MARKER, usage: null })
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.saveBookingFromAi).toHaveBeenCalledTimes(1)
+      expect(h.engineSendText).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips a reply that is still asking something', async () => {
+      h.generateReply.mockResolvedValue(plain('Which day works for you?'))
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.extractBookingFromChat).not.toHaveBeenCalled()
+    })
+
+    it('skips when the marker was there', async () => {
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.extractBookingFromChat).not.toHaveBeenCalled()
+    })
+
+    it('skips accounts with no booking types', async () => {
+      h.loadBookingContext.mockResolvedValue({ types: [], timeZone: null })
+      h.generateReply.mockResolvedValue(plain('Confirmed!'))
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.extractBookingFromChat).not.toHaveBeenCalled()
+    })
+
+    it('skips a handoff', async () => {
+      h.generateReply.mockResolvedValue({ ...plain(''), handoff: true })
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.extractBookingFromChat).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('when the booking needs the customer first', () => {
+    const FOLLOW_UP = 'System note: that slot is taken.'
+
+    beforeEach(() => {
+      h.saveBookingFromAi.mockResolvedValue({
+        ok: true,
+        outcome: 'needs_followup',
+        instruction: FOLLOW_UP,
+        booking: null,
+        type: { ...TYPE, handoff_on_confirm: true },
+      })
+      h.generateReply
+        .mockResolvedValueOnce({
+          text: 'Confirmed for 11!',
+          handoff: false,
+          booking: MARKER,
+          bookingMalformed: false,
+        })
+        .mockResolvedValueOnce({
+          text: 'That time is taken. Is 12 ok?',
+          handoff: false,
+          booking: null,
+          bookingMalformed: false,
+        })
+    })
+
+    it('replaces the false confirmation with the follow-up', async () => {
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.engineSendText).toHaveBeenCalledTimes(1)
+      expect(h.engineSendText).toHaveBeenCalledWith(
+        expect.objectContaining({ text: 'That time is taken. Is 12 ok?' }),
+      )
+    })
+
+    it('tells the model what to ask', async () => {
+      await dispatchInboundToAiReply(ARGS)
+      const retry = h.generateReply.mock.calls[1][0].systemPrompt as string
+      expect(retry).toContain(FOLLOW_UP)
+    })
+
+    it('does not act on a marker in the follow-up', async () => {
+      h.generateReply.mockReset()
+      h.generateReply.mockResolvedValue({
+        text: 'Is 12 ok?',
+        handoff: false,
+        booking: MARKER,
+        bookingMalformed: false,
+      })
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.saveBookingFromAi).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not hand the chat over, since nothing was booked', async () => {
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.state.updatePayload).toBeNull()
+    })
+
+    it('hands off rather than confirming if the follow-up fails', async () => {
+      h.generateReply.mockReset()
+      h.generateReply
+        .mockResolvedValueOnce({
+          text: 'Confirmed for 11!',
+          handoff: false,
+          booking: MARKER,
+          bookingMalformed: false,
+        })
+        .mockRejectedValueOnce(new Error('provider down'))
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.engineSendText).not.toHaveBeenCalled()
+      expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
+    })
+
+    it('hands off if the follow-up comes back empty', async () => {
+      h.generateReply.mockReset()
+      h.generateReply
+        .mockResolvedValueOnce({
+          text: 'Confirmed for 11!',
+          handoff: false,
+          booking: MARKER,
+          bookingMalformed: false,
+        })
+        .mockResolvedValueOnce({
+          text: '',
+          handoff: true,
+          booking: null,
+          bookingMalformed: false,
+        })
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.engineSendText).not.toHaveBeenCalled()
+      expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
+    })
+  })
 })
 
 describe('dispatchInboundToAiReply — eligibility gates', () => {
