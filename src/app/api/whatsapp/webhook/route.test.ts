@@ -43,6 +43,8 @@ const h = vi.hoisted(() => ({
     broadcastRecipient: null as { id: string; status: string } | null,
     /** Patches applied to that broadcast_recipients row. */
     recipientUpdates: [] as Record<string, unknown>[],
+    /** Rows written to webhook_inbound_log (WEBHOOK_DEBUG_LOG). */
+    inboundLogRows: [] as Record<string, unknown>[],
   },
 }))
 
@@ -203,6 +205,13 @@ vi.mock('@supabase/supabase-js', () => ({
                     error: null,
                   }),
               }
+            },
+          }
+        case 'webhook_inbound_log':
+          return {
+            insert: (rows: Record<string, unknown>[]) => {
+              h.state.inboundLogRows.push(...rows)
+              return Promise.resolve({ error: null })
             },
           }
         default:
@@ -381,6 +390,8 @@ beforeEach(() => {
   h.state.whatsappConfigLookups = []
   h.state.broadcastRecipient = null
   h.state.recipientUpdates = []
+  h.state.inboundLogRows = []
+  delete process.env.WEBHOOK_DEBUG_LOG
   mockFindExistingContact.mockResolvedValue({
     id: 'contact-1',
     name: 'Ada',
@@ -1171,5 +1182,81 @@ describe('inbound webhook: first_inbound_message fires once', () => {
     h.state.messageUpsertResult = []
     await runWebhook()
     expect(h.state.firstInboundClaims).toBe(0)
+  })
+})
+
+describe('inbound diagnostic log (WEBHOOK_DEBUG_LOG)', () => {
+  it('writes nothing when the flag is off', async () => {
+    await runWebhook()
+
+    expect(h.state.inboundLogRows).toEqual([])
+    expect(h.state.upsertCalls).toHaveLength(1)
+  })
+
+  it('records the delivery and that the message was inserted', async () => {
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+
+    await runWebhook()
+
+    expect(h.state.inboundLogRows).toEqual([
+      expect.objectContaining({
+        signature_ok: true,
+        field: 'messages',
+        phone_number_id: 'pn-1',
+        message_id: 'wamid.TEST1',
+        message_type: 'text',
+        outcome: 'received',
+        detail: 'contacts,messages,metadata',
+      }),
+      expect.objectContaining({
+        phone_number_id: 'pn-1',
+        message_id: 'wamid.TEST1',
+        outcome: 'inserted',
+      }),
+    ])
+  })
+
+  it('records a replayed delivery as a duplicate', async () => {
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+    h.state.messageUpsertResult = []
+
+    await runWebhook()
+
+    expect(h.state.inboundLogRows.map((r) => r.outcome)).toEqual([
+      'received',
+      'duplicate',
+    ])
+  })
+
+  it('records why a message never reached the insert', async () => {
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+
+    await runWebhook({ ...TEXT_MESSAGE, from: undefined }, [{ profile: { name: 'Ada' } }])
+
+    expect(h.state.inboundLogRows.map((r) => r.outcome)).toEqual([
+      'received',
+      'no_identity',
+    ])
+    expect(h.state.upsertCalls).toHaveLength(0)
+  })
+
+  it('records status-only deliveries with their status count', async () => {
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+
+    await runStatusWebhook({
+      id: 'wamid.OUT1',
+      status: 'read',
+      timestamp: '1700000000',
+      recipient_id: '15551230000',
+    })
+
+    expect(h.state.inboundLogRows).toEqual([
+      expect.objectContaining({
+        outcome: 'received',
+        status_count: 1,
+        message_id: null,
+        detail: 'metadata,statuses',
+      }),
+    ])
   })
 })
