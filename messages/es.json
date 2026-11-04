@@ -54,6 +54,7 @@
     "inbox": "Bandeja de entrada",
     "notifications": "Notificaciones",
     "contacts": "Contactos",
+    "bookings": "Reservas",
     "pipelines": "Pipelines",
     "broadcasts": "Difusiones",
     "automations": "Automatizaciones",
@@ -2434,7 +2435,7 @@
       "subtitle": "— prueba respuestas como si fueras un cliente",
       "reset": "Reiniciar",
       "emptyTitle": "Envía un mensaje para ver cómo respondería tu agente.",
-      "emptyDesc": "Usa tu base de conocimiento y se comporta exactamente como el bot de respuesta automática, incluida la derivación.",
+      "emptyDesc": "Usa tu base de conocimiento y se comporta exactamente como el bot de respuesta automática, incluida la derivación. Aquí las reservas solo se previsualizan, nunca se guardan.",
       "goToSetup": "¿Aún no está configurado? Ve a Configuración",
       "handoff": "Aquí derivaría la conversación a una persona",
       "thinking": "Pensando…",
@@ -2442,8 +2443,8 @@
       "notConfigured": "Aún no hay un agente configurado; completa primero la Configuración.",
       "noReply": "No se pudo obtener una respuesta.",
       "unreachable": "No se pudo conectar con el agente.",
-      "bookingPreview": "Se guardaría la reserva: {type}",
-      "bookingCancelPreview": "Se cancelaría la reserva: {type}",
+      "bookingPreview": "Solo vista previa, no se guarda. Un chat real de WhatsApp reservaría: {type}",
+      "bookingCancelPreview": "Solo vista previa, no se guarda. Un chat real de WhatsApp cancelaría: {type}",
       "bookingMalformed": "El agente intentó guardar una reserva, pero no se pudo leer. En un chat real se transferiría a una persona."
     },
     "usage": {

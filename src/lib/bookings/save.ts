@@ -268,7 +268,7 @@ function followUp(type: BookingType, instruction: string): SaveBookingResult {
 }
 
 async function slotFollowUp(
-  args: SaveBookingArgs,
+  args: Pick<SaveBookingArgs, 'db' | 'accountId' | 'timeZone' | 'now'>,
   type: BookingType,
   next: Scheduled,
   reason: Exclude<SlotCheck, 'free'>,
@@ -471,6 +471,44 @@ async function saveBooking(
   return base
     ? updateBooking(args, type, base, next, slotLost)
     : insertBooking(args, type, next, { slotLost })
+}
+
+export type SlotPreview =
+  | { outcome: 'free' }
+  | { outcome: 'needs_followup'; instruction: string }
+  | { outcome: 'handoff' }
+
+/**
+ * How the save would treat this time, for previews that must not write.
+ * `free` when nothing about the slot would stop it, `needs_followup` with
+ * what the bot would be told, and `handoff` when the save would fail and
+ * the real bot would leave the chat to a human.
+ */
+export async function previewSlotCheck(
+  args: Pick<SaveBookingArgs, 'db' | 'accountId' | 'types' | 'timeZone' | 'marker' | 'now'>,
+): Promise<SlotPreview> {
+  const { marker } = args
+  const type = args.types.find((t) => t.key === marker.type)
+  if (!type || type.time_mode === 'none' || marker.action !== 'save') return { outcome: 'free' }
+
+  const start = parseScheduledLocal(marker.scheduledLocal, args.timeZone, args.now)
+  if (!start) return { outcome: 'free' }
+
+  const taken = await loadTakenSlots(args.db, args.accountId, type.id, args.now)
+  if (!taken) return { outcome: 'handoff' }
+
+  const slot = checkSlot(type, start, taken, args.timeZone)
+  if (slot === 'free') return { outcome: 'free' }
+
+  const result = await slotFollowUp(
+    args,
+    type,
+    { fields: {}, scheduled_at: start.toISOString(), scheduled_text: marker.scheduledText },
+    slot,
+  )
+  return result.ok && result.outcome === 'needs_followup'
+    ? { outcome: 'needs_followup', instruction: result.instruction }
+    : { outcome: 'handoff' }
 }
 
 /**

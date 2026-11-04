@@ -54,6 +54,7 @@
     "inbox": "인박스",
     "notifications": "알림",
     "contacts": "연락처",
+    "bookings": "예약",
     "pipelines": "파이프라인",
     "broadcasts": "브로드캐스트",
     "automations": "자동화",
@@ -2434,7 +2435,7 @@
       "subtitle": "— 고객 입장에서 답변을 테스트하세요",
       "reset": "초기화",
       "emptyTitle": "메시지를 보내 에이전트가 어떻게 답하는지 확인하세요.",
-      "emptyDesc": "지식베이스를 사용하며 자동 응답 봇과 똑같이 동작합니다 — 인계까지 포함해서요.",
+      "emptyDesc": "지식베이스를 사용하며 자동 응답 봇과 똑같이 동작합니다 — 인계까지 포함해서요. 여기서 예약은 미리보기만 되고 저장되지 않습니다.",
       "goToSetup": "아직 설정하지 않았나요? 설정으로 이동",
       "handoff": "여기서 사람에게 인계합니다",
       "thinking": "생각 중…",
@@ -2442,8 +2443,8 @@
       "notConfigured": "아직 에이전트가 설정되지 않았습니다 — 먼저 설정을 완료하세요.",
       "noReply": "답변을 받을 수 없습니다.",
       "unreachable": "에이전트에 연결할 수 없습니다.",
-      "bookingPreview": "저장될 예약: {type}",
-      "bookingCancelPreview": "취소될 예약: {type}",
+      "bookingPreview": "미리보기 전용, 저장되지 않음. 실제 WhatsApp 채팅이라면 예약됨: {type}",
+      "bookingCancelPreview": "미리보기 전용, 저장되지 않음. 실제 WhatsApp 채팅이라면 취소됨: {type}",
       "bookingMalformed": "에이전트가 예약을 저장하려 했지만 읽을 수 없습니다. 실제 채팅에서는 담당자에게 전달됩니다."
     },
     "usage": {

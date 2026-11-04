@@ -178,6 +178,8 @@ export function BookingTypesSettings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...rest,
+          // The form starts with one row; left blank, it isn't a field.
+          fields: rest.fields.filter((field) => field.label.trim() || field.key),
           assignee_user_id: assignee_user_id || null,
           remind_minutes_before: remind_enabled ? remind_minutes_before : null,
           slot_capacity: slot_limited ? slot_capacity : null,

@@ -54,6 +54,7 @@
     "inbox": "Caixa de entrada",
     "notifications": "Notificações",
     "contacts": "Contatos",
+    "bookings": "Agendamentos",
     "pipelines": "Pipelines",
     "broadcasts": "Disparos",
     "automations": "Automações",
@@ -2434,7 +2435,7 @@
       "subtitle": "— teste respostas como se você fosse um cliente",
       "reset": "Reiniciar",
       "emptyTitle": "Envie uma mensagem para ver como seu agente responderia.",
-      "emptyDesc": "Ele usa sua base de conhecimento e se comporta exatamente como o bot de resposta automática — inclusive na transferência.",
+      "emptyDesc": "Ele usa sua base de conhecimento e se comporta exatamente como o bot de resposta automática — inclusive na transferência. Aqui os agendamentos são só pré-visualizados, nunca salvos.",
       "goToSetup": "Ainda não configurou? Vá para Configuração",
       "handoff": "Aqui a conversa seria transferida para um humano",
       "thinking": "Pensando…",
@@ -2442,8 +2443,8 @@
       "notConfigured": "Nenhum agente configurado ainda — conclua a Configuração primeiro.",
       "noReply": "Não foi possível obter uma resposta.",
       "unreachable": "Não foi possível conectar ao agente.",
-      "bookingPreview": "Salvaria o agendamento: {type}",
-      "bookingCancelPreview": "Cancelaria o agendamento: {type}",
+      "bookingPreview": "Só pré-visualização, não é salvo. Um chat real do WhatsApp agendaria: {type}",
+      "bookingCancelPreview": "Só pré-visualização, não é salvo. Um chat real do WhatsApp cancelaria: {type}",
       "bookingMalformed": "O agente tentou salvar um agendamento, mas não foi possível lê-lo. Em um chat real, ele seria transferido para uma pessoa."
     },
     "usage": {

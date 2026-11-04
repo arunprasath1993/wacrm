@@ -54,6 +54,7 @@
     "inbox": "Inbox",
     "notifications": "Notifications",
     "contacts": "Contacts",
+    "bookings": "Bookings",
     "pipelines": "Pipelines",
     "broadcasts": "Broadcasts",
     "automations": "Automations",
@@ -2434,7 +2435,7 @@
       "subtitle": "— test replies as if you were a customer",
       "reset": "Reset",
       "emptyTitle": "Send a message to see how your agent would reply.",
-      "emptyDesc": "It uses your knowledge base and behaves exactly like the auto-reply bot — including handoff.",
+      "emptyDesc": "It uses your knowledge base and behaves exactly like the auto-reply bot — including handoff. Bookings are only previewed here, never saved.",
       "goToSetup": "Not set up yet? Go to Setup",
       "handoff": "Would hand off to a human here",
       "thinking": "Thinking…",
@@ -2442,8 +2443,8 @@
       "notConfigured": "No agent configured yet — finish Setup first.",
       "noReply": "Couldn't get a reply.",
       "unreachable": "Couldn't reach the agent.",
-      "bookingPreview": "Would save booking: {type}",
-      "bookingCancelPreview": "Would cancel booking: {type}",
+      "bookingPreview": "Preview only, not saved. A real WhatsApp chat would book: {type}",
+      "bookingCancelPreview": "Preview only, not saved. A real WhatsApp chat would cancel: {type}",
       "bookingMalformed": "The agent tried to save a booking but it could not be read. A real chat would hand off to a human."
     },
     "usage": {

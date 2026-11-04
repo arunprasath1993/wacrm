@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { saveBookingFromAi } from './save'
+import { previewSlotCheck, saveBookingFromAi } from './save'
 import { createFakeDb, type FakeDb } from './test-db'
 import type { BookingMarker, BookingType } from './types'
 
@@ -325,6 +325,67 @@ describe('saveBookingFromAi — failures', () => {
     db.failNext('contacts', 'update')
     const result = await save(marker())
     expect(result).toMatchObject({ ok: true, outcome: 'created' })
+  })
+})
+
+describe('previewSlotCheck', () => {
+  const preview = (m: BookingMarker, types = [DEMO, CALLBACK]) =>
+    previewSlotCheck({
+      db: db.client,
+      accountId: 'acct-1',
+      types,
+      timeZone: 'Asia/Kolkata',
+      marker: m,
+      now: NOW,
+    })
+
+  it('flags a taken slot without saving anything', async () => {
+    db.tables.bookings.push({
+      id: 'held',
+      account_id: 'acct-1',
+      contact_id: 'someone-else',
+      booking_type_id: 'type-demo',
+      status: 'open',
+      fields: {},
+      scheduled_at: '2026-11-01T05:30:00.000Z',
+      scheduled_text: null,
+    })
+
+    const result = await preview(marker())
+    expect(result).toMatchObject({ outcome: 'needs_followup' })
+    expect(result.outcome === 'needs_followup' ? result.instruction : '').toContain(
+      'already booked',
+    )
+    expect(db.tables.bookings).toHaveLength(1)
+  })
+
+  it('flags a time outside working hours', async () => {
+    const closedSunday = { ...DEMO, available_days: [1, 2, 3, 4, 5, 6] }
+    const result = await preview(marker(), [closedSunday])
+    expect(result).toMatchObject({ outcome: 'needs_followup' })
+    expect(result.outcome === 'needs_followup' ? result.instruction : '').toContain(
+      'outside the available',
+    )
+  })
+
+  it('passes a free slot', async () => {
+    expect(await preview(marker())).toEqual({ outcome: 'free' })
+  })
+
+  it('ignores cancels and types with no time', async () => {
+    expect(await preview(marker({ action: 'cancel' }))).toEqual({ outcome: 'free' })
+    expect(await preview(marker({ type: 'callback' }))).toEqual({ outcome: 'free' })
+  })
+
+  it('hands off when there is no free time to offer', async () => {
+    expect(await preview(marker(), [{ ...DEMO, available_days: [] }])).toEqual({
+      outcome: 'handoff',
+    })
+  })
+
+  it('hands off when the slot lookup fails', async () => {
+    db.failNext('bookings', 'select')
+    expect(await preview(marker())).toEqual({ outcome: 'handoff' })
   })
 })
 
