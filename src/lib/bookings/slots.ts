@@ -18,6 +18,22 @@ function toMinutes(clock: string): number {
   return hours * 60 + minutes
 }
 
+/** Whether `[startMinutes, startMinutes + duration)` touches the type's break. */
+function overlapsBreak(type: BookingType, startMinutes: number): boolean {
+  if (!type.break_from || !type.break_to) return false
+  const breakStart = toMinutes(type.break_from)
+  const breakEnd = toMinutes(type.break_to)
+  if (breakEnd <= breakStart) return false
+  return startMinutes < breakEnd && startMinutes + type.duration_minutes > breakStart
+}
+
+/** Minute of the day the type's break ends, or null when it has no valid break. */
+function breakEndMinutes(type: BookingType): number | null {
+  if (!type.break_from || !type.break_to) return null
+  const breakEnd = toMinutes(type.break_to)
+  return breakEnd > toMinutes(type.break_from) ? breakEnd : null
+}
+
 /** ISO weekday (1 = Monday) of a `YYYY-MM-DD` calendar date. */
 function isoWeekday(dayKey: string): number {
   return new Date(`${dayKey}T00:00:00.000Z`).getUTCDay() || 7
@@ -47,7 +63,8 @@ export function checkSlot(
   const open =
     type.available_days.includes(isoWeekday(local.slice(0, 10))) &&
     startMinutes >= toMinutes(type.available_from) &&
-    startMinutes + type.duration_minutes <= toMinutes(type.available_to)
+    startMinutes + type.duration_minutes <= toMinutes(type.available_to) &&
+    !overlapsBreak(type, startMinutes)
   if (!open) return 'outside_hours'
 
   return isFull(type, start, taken) ? 'full' : 'free'
@@ -80,6 +97,14 @@ export function freeSlots(
         { year, month, day, hour: Math.floor(minutes / 60), minute: minutes % 60 },
         timeZone,
       )
+      if (overlapsBreak(type, minutes)) {
+        // Resume exactly at the break end; the loop step adds the duration back.
+        const breakEnd = breakEndMinutes(type)
+        if (breakEnd !== null && breakEnd - type.duration_minutes > minutes) {
+          minutes = breakEnd - type.duration_minutes
+        }
+        continue
+      }
       if (start <= now || isFull(type, start, taken)) continue
       offers.push(start)
       offeredToday += 1

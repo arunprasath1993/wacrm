@@ -128,6 +128,11 @@ describe('validateBookingType', () => {
     ['a bad opening time', { available_from: '25:00' }],
     ['closing before opening', { available_from: '18:00', available_to: '09:00' }],
     ['hours shorter than a booking', { available_from: '09:00', available_to: '10:00' }],
+    ['a break with only a start', { break_from: '13:00' }],
+    ['a break that ends before it starts', { break_from: '14:00', break_to: '13:00' }],
+    ['a zero-length break', { break_from: '13:00', break_to: '13:00' }],
+    ['a break outside working hours', { break_from: '19:00', break_to: '20:00' }],
+    ['a malformed break time', { break_from: '1pm', break_to: '2pm' }],
     ['fields that are not a list', { fields: 'name' }],
     ['a field with no label', { fields: [{ label: ' ' }] }],
     ['an unknown contact mapping', { fields: [{ label: 'x', maps_to: 'password' }] }],
@@ -185,5 +190,23 @@ describe('resolveBookingPatch', () => {
     ['non-object fields', { fields: 'x' }],
   ])('rejects %s', (_name, body) => {
     expect(patch(body).ok).toBe(false)
+  })
+})
+
+describe('validateBookingType: daily break', () => {
+  it('keeps a valid break, trimmed to HH:mm', () => {
+    const result = validateBookingType({ ...VALID, break_from: '13:00:00', break_to: '14:00' })
+    expect(result).toMatchObject({ ok: true, value: { break_from: '13:00', break_to: '14:00' } })
+  })
+
+  it('treats a missing or empty break as none', () => {
+    expect(validateBookingType(VALID)).toMatchObject({
+      ok: true,
+      value: { break_from: null, break_to: null },
+    })
+    expect(validateBookingType({ ...VALID, break_from: '', break_to: '' })).toMatchObject({
+      ok: true,
+      value: { break_from: null, break_to: null },
+    })
   })
 })

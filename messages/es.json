@@ -1503,7 +1503,14 @@
         "uploadFailed": "Error al subir.",
         "fileTooLarge": "El archivo pesa {size} MB; el límite es 16 MB.",
         "defaultOptionTitle": "Opción",
-        "optionN": "Opción {n}"
+        "optionN": "Opción {n}",
+        "bookingTypeLabel": "Tipo de reserva",
+        "anyBookingType": "Cualquier tipo de reserva (la IA pregunta)",
+        "noBookingTypes": "Aún no hay tipos de reserva. Crea uno primero en Reservas.",
+        "startBookingText": "Mensaje inicial enviado al cliente",
+        "startBookingTextPlaceholder": "¡Perfecto, hagamos tu reserva! ¿Qué fecha y hora te viene bien?",
+        "afterBookingAdvance": "Cuando se guarde la reserva, avanzar a",
+        "startBookingHelp": "El asistente de IA toma el control y recoge los datos de la reserva. Las respuestas del cliente van a la IA hasta que se guarda la reserva y luego el flujo continúa. Deja vacío el siguiente paso para terminar el flujo ahí. Requiere la respuesta automática de IA activada; si no, el chat pasa a un agente."
       },
       "categories": {
         "messaging": "Mensajería",
@@ -1542,6 +1549,10 @@
         "set_tag": {
           "label": "Etiquetar contacto",
           "blurb": "Agrega o quita una etiqueta del contacto"
+        },
+        "start_booking": {
+          "label": "Iniciar reserva",
+          "blurb": "Pasa el chat a la IA para tomar una reserva"
         },
         "handoff": {
           "label": "Transferir a agente",
@@ -2378,6 +2389,10 @@
       "availabilityDesc": "La IA solo confirma horas dentro de este horario que sigan libres.",
       "availableFrom": "Desde",
       "availableTo": "Hasta",
+      "breakEnabled": "Descanso diario (p. ej., almuerzo)",
+      "breakFrom": "Descanso desde",
+      "breakTo": "Descanso hasta",
+      "breakDesc": "Ninguna reserva puede coincidir con el descanso. Una reserva puede empezar en cuanto termina.",
       "slotCapacity": "Reservas al mismo tiempo",
       "slotLimited": "Limitar reservas al mismo tiempo",
       "slotCapacityDesc": "Por ejemplo, 1 presentador o 3 equipos de instalación. Desactívalo para no poner límite."
@@ -2795,7 +2810,9 @@
       "setTagNeedsTag": "El nodo Etiquetar contacto necesita una etiqueta para aplicar.",
       "setTagNeedsNext": "El nodo Etiquetar contacto debe apuntar a un nodo siguiente.",
       "setTagMissingNext": "El nodo Etiquetar contacto apunta a un nodo inexistente: \"{key}\".",
-      "unknownNodeType": "Tipo de nodo desconocido: \"{type}\"."
+      "unknownNodeType": "Tipo de nodo desconocido: \"{type}\".",
+      "startBookingNeedsText": "Iniciar reserva necesita un mensaje inicial.",
+      "startBookingMissingNext": "El nodo Iniciar reserva apunta a un nodo inexistente: \"{key}\"."
     },
     "automations": {
       "needsStep": "las automatizaciones activas necesitan al menos un paso",
@@ -3134,6 +3151,7 @@
       "typeAndContactRequired": "El tipo de reserva y el contacto son obligatorios",
       "capacityInvalid": "Las reservas por horario deben ser un número entero de 1 a 1000",
       "availabilityInvalid": "Elige al menos un día y un horario donde quepa una reserva",
+      "breakInvalid": "Indica ambas horas del descanso dentro del horario laboral, con el inicio antes del final.",
       "slotTaken": "Ese horario ya está completo"
     },
     "businessProfile": {

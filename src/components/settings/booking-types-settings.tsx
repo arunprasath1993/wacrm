@@ -49,6 +49,9 @@ interface Draft {
   available_days: number[];
   available_from: string;
   available_to: string;
+  break_enabled: boolean;
+  break_from: string;
+  break_to: string;
   is_active: boolean;
 }
 
@@ -78,6 +81,9 @@ const EMPTY_DRAFT: Draft = {
   available_days: [1, 2, 3, 4, 5, 6],
   available_from: '09:00',
   available_to: '18:00',
+  break_enabled: false,
+  break_from: '13:00',
+  break_to: '14:00',
   is_active: true,
 };
 
@@ -98,6 +104,9 @@ function toDraft(type: StoredType): Draft {
     available_days: type.available_days,
     available_from: type.available_from.slice(0, 5),
     available_to: type.available_to.slice(0, 5),
+    break_enabled: Boolean(type.break_from && type.break_to),
+    break_from: type.break_from?.slice(0, 5) ?? '13:00',
+    break_to: type.break_to?.slice(0, 5) ?? '14:00',
     is_active: type.is_active,
   };
 }
@@ -171,6 +180,9 @@ export function BookingTypesSettings() {
         assignee_user_id,
         slot_limited,
         slot_capacity,
+        break_enabled,
+        break_from,
+        break_to,
         ...rest
       } = draft;
       const res = await fetch(id ? `/api/booking-types/${id}` : '/api/booking-types', {
@@ -183,6 +195,8 @@ export function BookingTypesSettings() {
           assignee_user_id: assignee_user_id || null,
           remind_minutes_before: remind_enabled ? remind_minutes_before : null,
           slot_capacity: slot_limited ? slot_capacity : null,
+          break_from: break_enabled ? break_from : null,
+          break_to: break_enabled ? break_to : null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -463,6 +477,43 @@ export function BookingTypesSettings() {
                         onChange={(e) => setDraft({ ...draft, available_to: e.target.value })}
                       />
                     </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={draft.break_enabled}
+                        aria-label={t('breakEnabled')}
+                        onCheckedChange={(checked) =>
+                          setDraft({ ...draft, break_enabled: checked })
+                        }
+                      />
+                      <span className="text-sm">{t('breakEnabled')}</span>
+                    </div>
+                    {draft.break_enabled && (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="type-break-from">{t('breakFrom')}</Label>
+                          <Input
+                            id="type-break-from"
+                            type="time"
+                            value={draft.break_from}
+                            onChange={(e) =>
+                              setDraft({ ...draft, break_from: e.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="type-break-to">{t('breakTo')}</Label>
+                          <Input
+                            id="type-break-to"
+                            type="time"
+                            value={draft.break_to}
+                            onChange={(e) => setDraft({ ...draft, break_to: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-muted-foreground text-xs">{t('breakDesc')}</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="type-capacity">{t('slotCapacity')}</Label>

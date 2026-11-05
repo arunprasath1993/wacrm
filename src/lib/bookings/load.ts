@@ -1,8 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { BookingType } from './types'
 
-const TYPE_COLUMNS =
+const BASE_TYPE_COLUMNS =
   'id, key, name, fields, time_mode, duration_minutes, instructions, assignee_user_id, handoff_on_confirm, remind_minutes_before, slot_capacity, available_days, available_from, available_to'
+// Added by migration 067. Read separately so a database that hasn't run
+// it yet still takes bookings (without breaks) instead of losing them all.
+const TYPE_COLUMNS = `${BASE_TYPE_COLUMNS}, break_from, break_to`
 
 export interface BookingContext {
   types: BookingType[]
@@ -26,13 +29,23 @@ export async function loadBookingContext(
   if (accountError || !account) return { types: [], timeZone: null }
   const timeZone = (account.time_zone as string | null) ?? null
 
-  const { data: types, error: typesError } = await db
-    .from('booking_types')
-    .select(TYPE_COLUMNS)
-    .eq('account_id', accountId)
-    .eq('is_active', true)
-    .is('archived_at', null)
-    .order('position')
+  const selectTypes = (columns: string) =>
+    db
+      .from('booking_types')
+      .select(columns)
+      .eq('account_id', accountId)
+      .eq('is_active', true)
+      .is('archived_at', null)
+      .order('position')
+
+  let { data: types, error: typesError } = await selectTypes(TYPE_COLUMNS)
+  if (typesError) {
+    console.warn(
+      '[bookings] loading booking types with breaks failed (is migration 067 applied?) — retrying without breaks:',
+      typesError.message,
+    )
+    ;({ data: types, error: typesError } = await selectTypes(BASE_TYPE_COLUMNS))
+  }
   if (typesError || !types) return { types: [], timeZone }
 
   return {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { loadBookingContext } from './load'
 import { createFakeDb } from './test-db'
 
@@ -52,5 +52,21 @@ describe('loadBookingContext', () => {
       types: [],
       timeZone: 'Asia/Kolkata',
     })
+  })
+})
+
+describe('loadBookingContext before migration 067', () => {
+  it('retries without the break columns instead of dropping every type', async () => {
+    const db = createFakeDb({
+      accounts: [{ id: 'a1', time_zone: 'Asia/Kolkata' }],
+      booking_types: [row('live')],
+    })
+    db.failNext('booking_types', 'select')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const context = await loadBookingContext(db.client, 'a1')
+    warn.mockRestore()
+
+    expect(context.types.map((t) => t.key)).toEqual(['live'])
   })
 })

@@ -33,6 +33,8 @@ export interface BookingTypeInput {
   available_days: number[]
   available_from: string
   available_to: string
+  break_from: string | null
+  break_to: string | null
   is_active: boolean
 }
 
@@ -40,7 +42,12 @@ type Validated<T> = { ok: true; value: T } | { ok: false; error: string }
 
 type Availability = Pick<
   BookingTypeInput,
-  'slot_capacity' | 'available_days' | 'available_from' | 'available_to'
+  | 'slot_capacity'
+  | 'available_days'
+  | 'available_from'
+  | 'available_to'
+  | 'break_from'
+  | 'break_to'
 >
 
 const DEFAULT_DAYS = [1, 2, 3, 4, 5, 6]
@@ -83,6 +90,28 @@ function validateAvailability(
     return { ok: false, error: t('bookings.availabilityInvalid') }
   }
 
+  // Optional daily break: both ends or neither ('' from an empty input
+  // counts as unset), inside the working hours, start before end.
+  const rawBreakFrom = body.break_from === '' ? null : (body.break_from ?? null)
+  const rawBreakTo = body.break_to === '' ? null : (body.break_to ?? null)
+  let breakFrom: string | null = null
+  let breakTo: string | null = null
+  if (rawBreakFrom !== null || rawBreakTo !== null) {
+    const validBreak =
+      typeof rawBreakFrom === 'string' &&
+      typeof rawBreakTo === 'string' &&
+      CLOCK_PATTERN.test(rawBreakFrom) &&
+      CLOCK_PATTERN.test(rawBreakTo) &&
+      toMinutes(rawBreakFrom) < toMinutes(rawBreakTo) &&
+      toMinutes(rawBreakFrom) >= toMinutes(from) &&
+      toMinutes(rawBreakTo) <= toMinutes(to)
+    if (!validBreak) {
+      return { ok: false, error: t('bookings.breakInvalid') }
+    }
+    breakFrom = rawBreakFrom.slice(0, 5)
+    breakTo = rawBreakTo.slice(0, 5)
+  }
+
   return {
     ok: true,
     value: {
@@ -90,6 +119,8 @@ function validateAvailability(
       available_days: days,
       available_from: from.slice(0, 5),
       available_to: to.slice(0, 5),
+      break_from: breakFrom,
+      break_to: breakTo,
     },
   }
 }

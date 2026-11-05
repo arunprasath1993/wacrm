@@ -58,6 +58,7 @@ const NODE_TYPES: Record<FlowNodeType, true> = {
   collect_input: true,
   condition: true,
   set_tag: true,
+  start_booking: true,
   handoff: true,
   end: true,
 };

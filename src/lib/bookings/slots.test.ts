@@ -138,3 +138,57 @@ describe('loadTakenSlots', () => {
     expect(await loadTakenSlots(db.client, 'a1', 't1', NOW)).toBeNull()
   })
 })
+
+describe('daily break', () => {
+  // Monday 2 Nov 2026, IST. Lunch 13:00-14:00, 60-minute bookings.
+  const LUNCH: BookingType = { ...TYPE, break_from: '13:00:00', break_to: '14:00:00' }
+  const MON_1PM = '2026-11-02T07:30:00.000Z'
+  const MON_1230PM = '2026-11-02T07:00:00.000Z'
+  const MON_2PM = '2026-11-02T08:30:00.000Z'
+  const MON_205PM = '2026-11-02T08:35:00.000Z'
+  const MON_1215PM = '2026-11-02T06:45:00.000Z'
+
+  it('accepts 2:05 pm, after a 1-2 pm lunch break', () => {
+    expect(checkSlot(LUNCH, MON_205PM, [], TZ)).toBe('free')
+  })
+
+  it('accepts a booking that starts exactly when the break ends', () => {
+    expect(checkSlot(LUNCH, MON_2PM, [], TZ)).toBe('free')
+  })
+
+  it('accepts a booking that ends exactly when the break starts', () => {
+    expect(checkSlot({ ...LUNCH, available_from: '09:00' }, '2026-11-02T06:30:00.000Z', [], TZ)).toBe('free')
+  })
+
+  it('refuses a booking that starts during the break', () => {
+    expect(checkSlot(LUNCH, MON_1PM, [], TZ)).toBe('outside_hours')
+  })
+
+  it('refuses a booking that runs into the break', () => {
+    expect(checkSlot(LUNCH, MON_1230PM, [], TZ)).toBe('outside_hours')
+    expect(checkSlot(LUNCH, MON_1215PM, [], TZ)).toBe('outside_hours')
+  })
+
+  it('changes nothing for a type without a break', () => {
+    expect(checkSlot(TYPE, MON_1PM, [], TZ)).toBe('free')
+    expect(checkSlot({ ...TYPE, break_from: null, break_to: null }, MON_1PM, [], TZ)).toBe('free')
+  })
+
+  it('never offers a time that overlaps the break', () => {
+    const SAT_NIGHT = new Date('2026-10-31T18:00:00.000Z')
+    const slots = freeSlots({ ...LUNCH, available_from: '12:00' }, [], TZ, SAT_NIGHT)
+    expect(slots.slice(0, 2).map((s) => s.toISOString())).toEqual([
+      '2026-11-02T06:30:00.000Z', // 12:00, ends as lunch starts
+      MON_2PM, // 13:00 is skipped
+    ])
+  })
+
+  it('offers the break end even when the duration does not line up with it', () => {
+    const SAT_NIGHT = new Date('2026-10-31T18:00:00.000Z')
+    const slots = freeSlots({ ...LUNCH, duration_minutes: 45, available_from: '12:00' }, [], TZ, SAT_NIGHT)
+    expect(slots.slice(0, 2).map((s) => s.toISOString())).toEqual([
+      '2026-11-02T06:30:00.000Z', // 12:00-12:45
+      MON_2PM, // 12:45 and 13:30 overlap lunch; resumes at 14:00, not 14:15
+    ])
+  })
+})

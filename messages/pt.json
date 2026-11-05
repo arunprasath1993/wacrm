@@ -1503,7 +1503,14 @@
         "uploadFailed": "Falha no upload.",
         "fileTooLarge": "O arquivo tem {size} MB — o limite é 16 MB.",
         "defaultOptionTitle": "Opção",
-        "optionN": "Opção {n}"
+        "optionN": "Opção {n}",
+        "bookingTypeLabel": "Tipo de reserva",
+        "anyBookingType": "Qualquer tipo de reserva (a IA pergunta)",
+        "noBookingTypes": "Ainda não há tipos de reserva. Crie um primeiro em Reservas.",
+        "startBookingText": "Mensagem inicial enviada ao cliente",
+        "startBookingTextPlaceholder": "Ótimo, vamos fazer sua reserva! Qual data e horário são melhores para você?",
+        "afterBookingAdvance": "Depois que a reserva for salva, avançar para",
+        "startBookingHelp": "O assistente de IA assume e coleta os dados da reserva. As respostas do cliente vão para a IA até a reserva ser salva, e então o fluxo continua. Deixe o próximo passo vazio para encerrar o fluxo ali. Requer a resposta automática da IA ativada; caso contrário, o chat é passado a um agente."
       },
       "categories": {
         "messaging": "Mensagens",
@@ -1542,6 +1549,10 @@
         "set_tag": {
           "label": "Marcar contato",
           "blurb": "Adiciona ou remove uma tag do contato"
+        },
+        "start_booking": {
+          "label": "Iniciar reserva",
+          "blurb": "Passa o chat para a IA fazer uma reserva"
         },
         "handoff": {
           "label": "Transferir para agente",
@@ -2378,6 +2389,10 @@
       "availabilityDesc": "A IA só confirma horários dentro deste período que ainda estejam livres.",
       "availableFrom": "De",
       "availableTo": "Até",
+      "breakEnabled": "Pausa diária (ex.: almoço)",
+      "breakFrom": "Pausa de",
+      "breakTo": "Pausa até",
+      "breakDesc": "Nenhuma reserva pode coincidir com a pausa. Uma reserva pode começar assim que ela termina.",
       "slotCapacity": "Agendamentos ao mesmo tempo",
       "slotLimited": "Limitar agendamentos ao mesmo tempo",
       "slotCapacityDesc": "Por exemplo, 1 apresentador ou 3 equipes de instalação. Desative para não ter limite."
@@ -2795,7 +2810,9 @@
       "setTagNeedsTag": "O nó Marcar contato precisa de uma tag para aplicar.",
       "setTagNeedsNext": "O nó Marcar contato precisa apontar para um próximo nó.",
       "setTagMissingNext": "O nó Marcar contato aponta para um nó inexistente: \"{key}\".",
-      "unknownNodeType": "Tipo de nó desconhecido: \"{type}\"."
+      "unknownNodeType": "Tipo de nó desconhecido: \"{type}\".",
+      "startBookingNeedsText": "Iniciar reserva precisa de uma mensagem inicial.",
+      "startBookingMissingNext": "O nó Iniciar reserva aponta para um nó inexistente: \"{key}\"."
     },
     "automations": {
       "needsStep": "automações ativas precisam de pelo menos uma etapa",
@@ -3134,6 +3151,7 @@
       "typeAndContactRequired": "O tipo de agendamento e o contato são obrigatórios",
       "capacityInvalid": "Os agendamentos por horário devem ser um número inteiro de 1 a 1000",
       "availabilityInvalid": "Escolha pelo menos um dia e um horário em que caiba um agendamento",
+      "breakInvalid": "Defina os dois horários da pausa dentro do horário de trabalho, com o início antes do fim.",
       "slotTaken": "Esse horário já está lotado"
     },
     "businessProfile": {

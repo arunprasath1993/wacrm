@@ -15,10 +15,15 @@ const h = vi.hoisted(() => ({
   saveBookingFromAi: vi.fn(),
   loadAvailability: vi.fn(),
   extractBookingFromChat: vi.fn(),
+  loadActiveBookingStep: vi.fn(),
+  settleBookingStep: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
     autoResponders: [] as { id: string }[],
     claim: true as boolean,
+    claimError: null as { message: string } | null,
+    rpcRejects: false as boolean,
+    updateRejects: false as boolean,
     updatePayload: null as Record<string, unknown> | null,
     rpcCalls: [] as { name: string; args: unknown }[],
     latestInbound: [] as { message_id: string }[],
@@ -42,6 +47,10 @@ vi.mock('@/lib/bookings/save', () => ({ saveBookingFromAi: h.saveBookingFromAi }
 vi.mock('@/lib/bookings/slots', () => ({ loadAvailability: h.loadAvailability }))
 vi.mock('@/lib/bookings/capture', () => ({
   extractBookingFromChat: h.extractBookingFromChat,
+}))
+vi.mock('@/lib/flows/engine', () => ({
+  loadActiveBookingStep: h.loadActiveBookingStep,
+  settleBookingStep: h.settleBookingStep,
 }))
 vi.mock('./admin-client', () => ({
   supabaseAdmin: () => ({
@@ -77,13 +86,19 @@ vi.mock('./admin-client', () => ({
         }),
         update: (payload: Record<string, unknown>) => {
           h.state.updatePayload = payload
-          return { eq: () => Promise.resolve({ error: null }) }
+          return {
+            eq: () =>
+              h.state.updateRejects
+                ? Promise.reject(new Error('network down'))
+                : Promise.resolve({ error: null }),
+          }
         },
       }
     },
     rpc: (name: string, args: unknown) => {
       h.state.rpcCalls.push({ name, args })
-      return Promise.resolve({ data: h.state.claim, error: null })
+      if (h.state.rpcRejects) return Promise.reject(new Error('network down'))
+      return Promise.resolve({ data: h.state.claim, error: h.state.claimError })
     },
   }),
 }))
@@ -123,6 +138,9 @@ beforeEach(() => {
   }
   h.state.autoResponders = []
   h.state.claim = true
+  h.state.claimError = null
+  h.state.rpcRejects = false
+  h.state.updateRejects = false
   h.state.updatePayload = null
   h.state.rpcCalls = []
   h.state.latestInbound = [{ message_id: 'wamid.inbound-1' }]
@@ -145,6 +163,10 @@ beforeEach(() => {
   h.loadAvailability.mockResolvedValue({})
   h.extractBookingFromChat.mockReset()
   h.extractBookingFromChat.mockResolvedValue({ booking: null, usage: null })
+  h.loadActiveBookingStep.mockReset()
+  h.loadActiveBookingStep.mockResolvedValue(null)
+  h.settleBookingStep.mockReset()
+  h.settleBookingStep.mockResolvedValue(undefined)
 })
 
 describe('dispatchInboundToAiReply — bookings', () => {
@@ -318,6 +340,133 @@ describe('dispatchInboundToAiReply — bookings', () => {
     expect(prompt).toContain('Current date and time')
     expect(prompt).toContain('"online_demo"')
     expect(prompt).toContain('Ramu')
+  })
+
+  describe('when a Flow handed the chat over with a Start booking step', () => {
+    beforeEach(() => {
+      h.loadActiveBookingStep.mockResolvedValue({
+        flowRunId: 'run-1',
+        bookingTypeId: 'type-1',
+        knownDetails: { name: 'Ramu' },
+      })
+    })
+
+    it('steers the model toward that booking type', async () => {
+      await dispatchInboundToAiReply(ARGS)
+
+      const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+      expect(prompt).toContain('Current task')
+      expect(prompt).toContain('Online Demo')
+      expect(prompt).toContain('- name: Ramu')
+    })
+
+    it('resumes the flow after the confirmation is sent', async () => {
+      await dispatchInboundToAiReply(ARGS)
+
+      expect(h.engineSendText).toHaveBeenCalledTimes(1)
+      expect(h.settleBookingStep).toHaveBeenCalledWith({
+        accountId: 'acct-1',
+        contactId: 'contact-1',
+        result: 'booked',
+        bookingId: 'b1',
+      })
+      expect(h.engineSendText.mock.invocationCallOrder[0]).toBeLessThan(
+        h.settleBookingStep.mock.invocationCallOrder[0],
+      )
+    })
+
+    it('still resumes the flow when the reply slot is lost', async () => {
+      h.state.claim = false
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.settleBookingStep).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'booked' }),
+      )
+    })
+
+    it('still resumes the flow when claiming the reply slot errors', async () => {
+      h.state.claimError = { message: 'permission denied' }
+      const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await dispatchInboundToAiReply(ARGS)
+      consoleErr.mockRestore()
+      expect(h.settleBookingStep).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'booked' }),
+      )
+      expect(h.engineSendText).not.toHaveBeenCalled()
+    })
+
+    it('still resumes the flow, once, when claiming the slot throws', async () => {
+      h.state.rpcRejects = true
+      const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await dispatchInboundToAiReply(ARGS)
+      consoleErr.mockRestore()
+      expect(h.engineSendText).not.toHaveBeenCalled()
+      expect(h.settleBookingStep).toHaveBeenCalledTimes(1)
+      expect(h.settleBookingStep).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'booked', bookingId: 'b1' }),
+      )
+    })
+
+    it('still resumes the flow, once, when the confirmation send fails', async () => {
+      h.engineSendText.mockRejectedValue(new Error('meta 500'))
+      const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await dispatchInboundToAiReply(ARGS)
+      consoleErr.mockRestore()
+      expect(h.settleBookingStep).toHaveBeenCalledTimes(1)
+      expect(h.settleBookingStep).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'booked' }),
+      )
+    })
+
+    it('resumes the flow only once on the happy path', async () => {
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.settleBookingStep).toHaveBeenCalledTimes(1)
+    })
+
+    it('never resumes a flow the reply meant to hand off, even if the handoff write fails', async () => {
+      h.generateReply.mockResolvedValue({
+        text: '',
+        handoff: true,
+        booking: MARKER,
+        bookingMalformed: false,
+      })
+      h.state.updateRejects = true
+      const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {})
+      await dispatchInboundToAiReply(ARGS)
+      consoleErr.mockRestore()
+      expect(h.settleBookingStep).toHaveBeenCalledTimes(1)
+      expect(h.settleBookingStep).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'handed_off' }),
+      )
+    })
+
+    it('keeps the flow waiting while the booking is still being collected', async () => {
+      h.generateReply.mockResolvedValue({ text: 'Which day?', handoff: false })
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.settleBookingStep).not.toHaveBeenCalled()
+    })
+
+    it('keeps the flow waiting for an unchanged repeat', async () => {
+      h.saveBookingFromAi.mockResolvedValue(saved({ outcome: 'unchanged' }))
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.settleBookingStep).not.toHaveBeenCalled()
+    })
+
+    it('ends the flow step when the chat is handed to a human', async () => {
+      h.saveBookingFromAi.mockResolvedValue({ ok: false })
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.settleBookingStep).toHaveBeenCalledWith({
+        accountId: 'acct-1',
+        contactId: 'contact-1',
+        result: 'handed_off',
+      })
+    })
+  })
+
+  it('does not touch flows when no booking step is waiting', async () => {
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.settleBookingStep).not.toHaveBeenCalled()
+    const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    expect(prompt).not.toContain('Current task')
   })
 
   it('offers the model only the free times', async () => {
