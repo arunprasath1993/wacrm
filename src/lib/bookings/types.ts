@@ -39,6 +39,9 @@ export interface BookingType {
   /** `HH:mm` or `HH:mm:ss` in the account's timezone. */
   available_from: string
   available_to: string
+  /** Daily break (`HH:mm`, account timezone) no booking may overlap. Both null = none. */
+  break_from?: string | null
+  break_to?: string | null
 }
 
 export interface BookingRow {

@@ -1503,7 +1503,14 @@
         "uploadFailed": "Upload failed.",
         "fileTooLarge": "File is {size} MB — limit is 16 MB.",
         "defaultOptionTitle": "Option",
-        "optionN": "Option {n}"
+        "optionN": "Option {n}",
+        "bookingTypeLabel": "Booking type",
+        "anyBookingType": "Any booking type (the AI asks)",
+        "noBookingTypes": "No booking types yet. Create one under Bookings first.",
+        "startBookingText": "Opening message sent to the customer",
+        "startBookingTextPlaceholder": "Great, let's get you booked! Which date and time suits you?",
+        "afterBookingAdvance": "After the booking is saved, advance to",
+        "startBookingHelp": "The AI assistant takes over and collects the booking details. Customer replies go to the AI until the booking is saved, then the flow continues. Leave the next step empty to end the flow there. Needs AI auto-reply turned on; otherwise the chat is handed to an agent."
       },
       "categories": {
         "messaging": "Messaging",
@@ -1542,6 +1549,10 @@
         "set_tag": {
           "label": "Tag contact",
           "blurb": "Adds or removes a contact tag"
+        },
+        "start_booking": {
+          "label": "Start booking",
+          "blurb": "Hands the chat to the AI to take a booking"
         },
         "handoff": {
           "label": "Handoff to agent",
@@ -2378,6 +2389,10 @@
       "availabilityDesc": "The AI only confirms times inside these hours that are still free.",
       "availableFrom": "From",
       "availableTo": "To",
+      "breakEnabled": "Daily break (e.g. lunch)",
+      "breakFrom": "Break from",
+      "breakTo": "Break to",
+      "breakDesc": "No booking can overlap the break. A booking may start as soon as it ends.",
       "slotCapacity": "Bookings at the same time",
       "slotLimited": "Limit bookings at the same time",
       "slotCapacityDesc": "For example 1 presenter, or 3 installation crews. Turn off for no limit."
@@ -2795,7 +2810,9 @@
       "setTagNeedsTag": "Set-tag needs a tag to apply.",
       "setTagNeedsNext": "Set-tag must point to a next node.",
       "setTagMissingNext": "Set-tag points to non-existent node \"{key}\".",
-      "unknownNodeType": "Unknown node type \"{type}\"."
+      "unknownNodeType": "Unknown node type \"{type}\".",
+      "startBookingNeedsText": "Start booking needs an opening message.",
+      "startBookingMissingNext": "Start booking points to non-existent node \"{key}\"."
     },
     "automations": {
       "needsStep": "active automations need at least one step",
@@ -3134,6 +3151,7 @@
       "typeAndContactRequired": "Booking type and contact are required",
       "capacityInvalid": "Bookings per slot must be a whole number from 1 to 1000",
       "availabilityInvalid": "Choose at least one day, and hours long enough to fit a booking",
+      "breakInvalid": "Set both break times inside the working hours, with the start before the end.",
       "slotTaken": "That time slot is already full"
     },
     "businessProfile": {

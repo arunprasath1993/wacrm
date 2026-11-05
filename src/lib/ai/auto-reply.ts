@@ -19,6 +19,10 @@ import { loadBookingContext } from '@/lib/bookings/load'
 import { loadCustomerMemory } from '@/lib/bookings/memory'
 import { saveBookingFromAi } from '@/lib/bookings/save'
 import { loadAvailability } from '@/lib/bookings/slots'
+import {
+  loadActiveBookingStep,
+  settleBookingStep,
+} from '@/lib/flows/engine'
 import type { AiConfig, AiUsage, ChatMessage } from './types'
 
 /** Sent when the model recorded a booking but wrote no message with it. */
@@ -68,6 +72,11 @@ export async function dispatchInboundToAiReply(
     configOwnerUserId,
     inboundMessageId,
   } = args
+
+  // Set once a booking is saved for a Flow's "Start booking" step, so a
+  // failure after that point (a rejected RPC, a failed send) still lets
+  // the flow continue instead of leaving it parked until the timeout.
+  let resumeFlowOnError: (() => Promise<void>) | null = null
 
   try {
     const db = supabaseAdmin()
@@ -147,6 +156,21 @@ export async function dispatchInboundToAiReply(
       ? await loadAvailability(db, accountId, bookingTypes, timeZone)
       : {}
 
+    // A Flow's "Start booking" step parked its run and handed this chat
+    // over — steer the reply toward that booking.
+    const bookingStep =
+      bookingTypes.length > 0
+        ? await loadActiveBookingStep({ accountId, contactId })
+        : null
+    const bookingFocus = bookingStep
+      ? {
+          type:
+            bookingTypes.find((type) => type.id === bookingStep.bookingTypeId) ??
+            null,
+          knownDetails: bookingStep.knownDetails,
+        }
+      : null
+
     const systemPrompt = buildSystemPrompt({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
@@ -156,6 +180,7 @@ export async function dispatchInboundToAiReply(
       bookingTypes,
       availability,
       customerMemory,
+      bookingFocus,
     })
 
     const {
@@ -255,6 +280,32 @@ export async function dispatchInboundToAiReply(
         : null
     const needsFollowUp = savedBooking?.ok && savedBooking.outcome === 'needs_followup'
 
+    // A booking was made or changed: a Flow parked on a "Start booking"
+    // step continues from here. Called after the customer has the
+    // confirmation where possible, so the flow's next message follows it.
+    const booked =
+      savedBooking?.ok === true &&
+      (savedBooking.outcome === 'created' || savedBooking.outcome === 'updated')
+    // Each path settles the flow step at most once.
+    let flowSettled = false
+    const settleFlow = async (result: 'booked' | 'handed_off') => {
+      if (flowSettled || !bookingStep) return
+      if (result === 'booked' && !booked) return
+      flowSettled = true
+      await settleBookingStep(
+        result === 'booked'
+          ? {
+              accountId,
+              contactId,
+              result,
+              bookingId: savedBooking?.ok ? (savedBooking.booking?.id ?? null) : null,
+            }
+          : { accountId, contactId, result },
+      )
+    }
+    const resumeFlow = () => settleFlow('booked')
+    resumeFlowOnError = resumeFlow
+
     // The reply says "booked", so it can only go out if that is true.
     const bookingFailed =
       (bookingMalformed && !booking) ||
@@ -269,6 +320,10 @@ export async function dispatchInboundToAiReply(
       // and (c) leave a short internal note so whoever picks it up has
       // context. Assigning fires the `on_conversation_assigned` trigger,
       // which notifies the agent.
+      //
+      // The Flow's booking step ends first, so a failure below can't
+      // make the catch resume a flow this reply meant to hand off.
+      await settleFlow('handed_off')
       const summary = buildHandoffSummary({
         messages,
         replyCount: conv.ai_reply_count ?? 0,
@@ -290,6 +345,7 @@ export async function dispatchInboundToAiReply(
       inboundMessageId &&
       (await hasNewerInbound(db, conversationId, inboundMessageId))
     ) {
+      await resumeFlow()
       return
     }
 
@@ -311,9 +367,13 @@ export async function dispatchInboundToAiReply(
       // service role, or the migration not applied. Log it loudly: a
       // silent return makes "auto-reply never fires" undiagnosable.
       console.error('[ai auto-reply] claim_ai_reply_slot failed:', claimErr)
+      await resumeFlow()
       return
     }
-    if (claimed !== true) return
+    if (claimed !== true) {
+      await resumeFlow()
+      return
+    }
 
     await engineSendText({
       accountId,
@@ -338,8 +398,12 @@ export async function dispatchInboundToAiReply(
         .update({ assigned_agent_id: savedBooking.booking.assigned_to })
         .eq('id', conversationId)
     }
+
+    await resumeFlow()
   } catch (err) {
     console.error('[ai auto-reply] dispatch failed:', err)
+    // settleBookingStep never throws, so this can't escape the catch.
+    if (resumeFlowOnError) await resumeFlowOnError()
   }
 }
 

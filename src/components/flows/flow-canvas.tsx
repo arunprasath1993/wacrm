@@ -150,7 +150,9 @@ function FlowNodeCard({ data, selected }: NodeProps) {
   // edge of the card. Multi-slot nodes (condition, send_buttons,
   // send_list) render slot rows inline so each handle visually sits
   // next to the slot it represents.
-  const isMultiSlot = slots.length > 1;
+  // start_booking has one exit, but "Next" would be misleading: it only
+  // fires once the AI has saved the booking, so its slot gets a row too.
+  const isMultiSlot = slots.length > 1 || node.node_type === 'start_booking';
   return (
     <div
       style={
@@ -244,6 +246,7 @@ function FlowNodeCard({ data, selected }: NodeProps) {
         <Handle
           type="source"
           id={slots[0].id}
+          title={slots[0].label}
           position={Position.Right}
           style={{ borderColor: c.solid }}
           className="!bg-card !h-2.5 !w-2.5 !border-2"
@@ -700,6 +703,7 @@ const ADD_NODE_TYPES: NodeType[] = [
   'collect_input',
   'condition',
   'set_tag',
+  'start_booking',
   'handoff',
   'end',
 ];

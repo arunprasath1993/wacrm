@@ -43,6 +43,7 @@ import { decideFallback, resolveFallbackPolicy } from "./fallback";
 import { addContactTagAndDispatch } from "@/lib/contacts/tag-events";
 import { removeContactTag } from "@/lib/contacts/tag-write";
 import { checkRunTimeout, markRunTimedOut, type RunTimeoutCheck } from "./timeout";
+import { bookingAiBlocker, bookingKnownDetails } from "./booking-step";
 import {
   type CollectInputNodeConfig,
   type ConditionNodeConfig,
@@ -57,6 +58,7 @@ import {
   type SendMediaNodeConfig,
   type SendMessageNodeConfig,
   type SetTagNodeConfig,
+  type StartBookingNodeConfig,
   type StartNodeConfig,
   type KeywordTriggerConfig,
   AUTO_ADVANCING_NODE_TYPES,
@@ -174,7 +176,8 @@ export function isSuspending(node_type: string): boolean {
   return (
     node_type === "send_buttons" ||
     node_type === "send_list" ||
-    node_type === "collect_input"
+    node_type === "collect_input" ||
+    node_type === "start_booking"
   );
 }
 
@@ -881,6 +884,9 @@ async function advanceFromNodeKey(
       }
       return { outcome: "advanced" };
     }
+    if (node.node_type === "start_booking") {
+      return enterBookingStep(db, run, node);
+    }
     if (node.node_type === "handoff") {
       await executeHandoff(db, run, node);
       return { outcome: "handed_off" };
@@ -903,6 +909,84 @@ async function advanceFromNodeKey(
   });
   await endRun(db, run.id, "failed", "advance_loop_overflow");
   return { outcome: "completed" };
+}
+
+/**
+ * `start_booking`: send the opening message and park the run on this
+ * node. While parked, inbound messages fall through to the AI
+ * auto-reply (see handleReplyForActiveRun), which takes the booking;
+ * `settleBookingStep` then resumes or ends the run.
+ *
+ * If the AI would not answer this conversation, parking would leave
+ * the customer talking to nobody — hand off to a human instead.
+ */
+async function enterBookingStep(
+  db: AdminClient,
+  run: FlowRunRow,
+  node: FlowNodeRow,
+): Promise<{ outcome: "advanced" | "completed" | "handed_off" }> {
+  const cfg = node.config as unknown as StartBookingNodeConfig;
+
+  let blocker: string | null;
+  try {
+    blocker = await bookingAiBlocker(db, run.account_id, run.conversation_id);
+  } catch (err) {
+    blocker = err instanceof Error ? `check_failed:${err.message}` : "check_failed";
+  }
+  if (blocker) {
+    if (run.conversation_id) {
+      await db
+        .from("conversations")
+        .update({ status: "pending", updated_at: new Date().toISOString() })
+        .eq("id", run.conversation_id);
+    }
+    await logEvent(db, run.id, "handoff", node.node_key, {
+      reason: "booking_ai_unavailable",
+      blocker,
+    });
+    await endRun(db, run.id, "handed_off", "booking_ai_unavailable");
+    return { outcome: "handed_off" };
+  }
+
+  try {
+    const { whatsapp_message_id } = await engineSendText({
+      accountId: run.account_id,
+      userId: run.user_id,
+      conversationId: run.conversation_id!,
+      contactId: run.contact_id!,
+      text: interpolateVars(cfg.text, run.vars),
+    });
+    await logEvent(db, run.id, "message_sent", node.node_key, {
+      node_type: "start_booking",
+      whatsapp_message_id,
+    });
+  } catch (err) {
+    await logEvent(db, run.id, "error", node.node_key, {
+      reason: "start_booking_send_failed",
+      detail: err instanceof Error ? err.message : String(err),
+    });
+    await endRun(db, run.id, "failed", "start_booking_send_failed");
+    return { outcome: "completed" };
+  }
+
+  const advanced = await advanceCurrentNodeKey(
+    db,
+    run.id,
+    run.current_node_key,
+    node.node_key,
+  );
+  if (!advanced) {
+    await logEvent(db, run.id, "error", node.node_key, {
+      reason: "lost_race_during_advance",
+    });
+    return { outcome: "advanced" };
+  }
+  run.current_node_key = node.node_key;
+  await logEvent(db, run.id, "node_entered", node.node_key, {
+    booking_step: "waiting_for_booking",
+    booking_type_id: cfg.booking_type_id || null,
+  });
+  return { outcome: "advanced" };
 }
 
 /**
@@ -1092,6 +1176,13 @@ async function handleReplyForActiveRun(
   });
 
   const currentNode = nodes.get(run.current_node_key!)!;
+
+  // Parked on a booking step: the AI auto-reply owns the conversation
+  // until the booking is saved, so let the message fall through to it.
+  // (The reply_received event above still guards against Meta retries.)
+  if (currentNode.node_type === "start_booking") {
+    return { consumed: false, flow_run_id: run.id, outcome: "deferred_to_booking" };
+  }
 
   // Two ways a reply can advance:
   //   1. Interactive button/list tap on a send_buttons/send_list node.
@@ -1285,4 +1376,121 @@ async function startNewRun(
     flow_run_id: run.id,
     outcome: outcome.outcome === "advanced" ? "started" : outcome.outcome,
   };
+}
+
+// ============================================================
+// Booking bridge — called by the AI auto-reply.
+// ============================================================
+
+export interface ActiveBookingStep {
+  flowRunId: string;
+  /** booking_types.id the node focuses on, or null for any type. */
+  bookingTypeId: string | null;
+  /** Flow vars to pass the AI as details the customer already gave. */
+  knownDetails: Record<string, string>;
+}
+
+/**
+ * The contact's active run, when it is parked on a `start_booking`
+ * node. Null otherwise — including on any lookup failure, so the AI
+ * reply simply goes ahead without the focus note.
+ */
+export async function loadActiveBookingStep(args: {
+  accountId: string;
+  contactId: string;
+}): Promise<ActiveBookingStep | null> {
+  try {
+    const db = supabaseAdmin();
+    const run = await loadActiveRunForContact(db, args.accountId, args.contactId);
+    if (!run || !run.current_node_key) return null;
+    const { data, error } = await db
+      .from("flow_nodes")
+      .select("node_type, config")
+      .eq("flow_id", run.flow_id)
+      .eq("node_key", run.current_node_key)
+      .maybeSingle();
+    if (error || !data) return null;
+    const node = data as Pick<FlowNodeRow, "node_type" | "config">;
+    if (node.node_type !== "start_booking") return null;
+    const cfg = node.config as unknown as StartBookingNodeConfig;
+    return {
+      flowRunId: run.id,
+      bookingTypeId: cfg.booking_type_id || null,
+      knownDetails: bookingKnownDetails(run.vars),
+    };
+  } catch (err) {
+    console.error(
+      "[flows] loadActiveBookingStep failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
+
+/**
+ * Move a run parked on a `start_booking` node past it.
+ *
+ *   - `booked`: the AI saved a booking, so advance to the node's
+ *     `next_node_key`, or complete the run when it has none.
+ *   - `handed_off`: the AI handed the chat to a human, so end the run
+ *     as handed_off instead of letting it sit until the timeout sweep.
+ *
+ * A no-op when the contact has no run parked on a booking step. Never
+ * throws — the caller is the AI reply path.
+ */
+export async function settleBookingStep(args: {
+  accountId: string;
+  contactId: string;
+  result: "booked" | "handed_off";
+  bookingId?: string | null;
+}): Promise<void> {
+  try {
+    const db = supabaseAdmin();
+    const run = await loadActiveRunForContact(db, args.accountId, args.contactId);
+    if (!run || !run.current_node_key) return;
+    const [flow, nodes] = await Promise.all([
+      loadFlow(db, run.flow_id),
+      loadAllNodes(db, run.flow_id),
+    ]);
+    const node = nodes.get(run.current_node_key);
+    if (!node || node.node_type !== "start_booking") return;
+
+    const now = new Date();
+    const closure = closureForActiveRun({ run, flow, nodeKeys: nodes, now });
+    if (closure) {
+      await closeActiveRun(db, run, closure, now);
+      return;
+    }
+
+    if (args.result === "handed_off") {
+      await logEvent(db, run.id, "handoff", node.node_key, {
+        reason: "booking_handoff",
+      });
+      await endRun(db, run.id, "handed_off", "booking_handoff");
+      return;
+    }
+
+    const cfg = node.config as unknown as StartBookingNodeConfig;
+    await logEvent(db, run.id, "node_entered", node.node_key, {
+      booking_step: "booking_saved",
+      booking_id: args.bookingId ?? null,
+    });
+    if (!cfg.next_node_key) {
+      await logEvent(db, run.id, "completed", node.node_key);
+      await endRun(db, run.id, "completed", "booking_saved");
+      return;
+    }
+    if (!(await claimReplyTransition(db, run, cfg.next_node_key))) {
+      await logEvent(db, run.id, "error", node.node_key, {
+        reason: "lost_race_after_booking",
+      });
+      return;
+    }
+    await advanceFromNodeKey(db, run, cfg.next_node_key, nodes);
+  } catch (err) {
+    console.error(
+      "[flows] settleBookingStep failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }

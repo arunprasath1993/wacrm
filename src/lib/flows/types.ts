@@ -173,6 +173,27 @@ export interface SetTagNodeConfig {
   next_node_key: string;
 }
 
+/**
+ * Hands the conversation to the AI booking assistant, then (optionally)
+ * picks the flow back up once the booking is saved.
+ *
+ * The node sends `text`, then parks the run on itself. While parked,
+ * customer messages are NOT consumed by the flow — they fall through to
+ * the AI auto-reply, which takes the booking (steered toward
+ * `booking_type_id` when set). When the AI saves a booking (created or
+ * updated), the run advances to `next_node_key`, or completes when it
+ * is empty. If the AI can't take the booking (auto-reply off, a human
+ * owns the thread, …) the node hands off to a human instead.
+ */
+export interface StartBookingNodeConfig {
+  /** booking_types.id to focus on. Empty = let the AI pick from every active type. */
+  booking_type_id?: string;
+  /** Opening message sent to the customer; can interpolate {{vars.X}}. */
+  text: string;
+  /** Where the flow continues once the booking is saved. Empty = the run completes. */
+  next_node_key?: string;
+}
+
 // Terminal nodes carry no config — they just stop the run.
 export type EndNodeConfig = Record<string, never>;
 
@@ -193,6 +214,7 @@ export type FlowNodeConfig =
   | { node_type: "collect_input"; config: CollectInputNodeConfig }
   | { node_type: "condition"; config: ConditionNodeConfig }
   | { node_type: "set_tag"; config: SetTagNodeConfig }
+  | { node_type: "start_booking"; config: StartBookingNodeConfig }
   | { node_type: "handoff"; config: HandoffNodeConfig }
   | { node_type: "end"; config: EndNodeConfig };
 
@@ -360,6 +382,7 @@ export interface DispatchInboundResult {
     | "handed_off"
     | "fallback_fired"
     | "duplicate_inbound_ignored"
+    | "deferred_to_booking"
     | "no_match";
 }
 

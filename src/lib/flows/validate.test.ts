@@ -626,3 +626,56 @@ describe("auto-advancing cycles", () => {
     expect(findAutoAdvancingCycles(validNodes)).toEqual([]);
   });
 });
+
+describe("validateFlowForActivation — start_booking", () => {
+  const withBooking = (config: Record<string, unknown>) => [
+    { node_key: "start", node_type: "start", config: { next_node_key: "book" } },
+    { node_key: "book", node_type: "start_booking", config },
+    { node_key: "ho", node_type: "handoff", config: {} },
+  ];
+
+  it("accepts a booking step that continues to another node", () => {
+    expect(
+      validateFlowForActivation(
+        validFlow,
+        withBooking({ booking_type_id: "bt-1", text: "When?", next_node_key: "ho" }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("allows no next node (the run completes after booking)", () => {
+    const issues = validateFlowForActivation(validFlow, [
+      { node_key: "start", node_type: "start", config: { next_node_key: "book" } },
+      { node_key: "book", node_type: "start_booking", config: { text: "When?" } },
+    ]);
+    expect(issues).toEqual([]);
+  });
+
+  it("requires an opening message", () => {
+    const issues = validateFlowForActivation(
+      validFlow,
+      withBooking({ text: "  ", next_node_key: "ho" }),
+    );
+    expect(issues).toEqual([
+      expect.objectContaining({ severity: "error", node_key: "book", field: "text" }),
+    ]);
+  });
+
+  it("flags a next node that does not exist", () => {
+    const issues = validateFlowForActivation(
+      validFlow,
+      withBooking({ text: "When?", next_node_key: "ghost" }),
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({ node_key: "book", field: "next_node_key" }),
+    );
+  });
+
+  it("follows the booking step's next node for reachability", () => {
+    const reached = reachableFromEntry(
+      "start",
+      withBooking({ text: "When?", next_node_key: "ho" }),
+    );
+    expect([...reached].sort()).toEqual(["book", "ho", "start"]);
+  });
+});

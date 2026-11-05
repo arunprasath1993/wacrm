@@ -196,6 +196,17 @@ export function NodeConfigForm({
         />
       );
 
+    case "start_booking":
+      return (
+        <StartBookingForm
+          cfg={cfg as StartBookingCfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+          t={t}
+        />
+      );
+
     case "handoff":
       return (
         <TextRow
@@ -861,6 +872,135 @@ function useUserTags(): UserTag[] {
     };
   }, []);
   return tags;
+}
+
+// ============================================================
+// start_booking
+// ============================================================
+
+interface StartBookingCfg {
+  booking_type_id?: string;
+  text?: string;
+  next_node_key?: string;
+}
+
+interface BookingTypeOption {
+  id: string;
+  name: string;
+  is_active?: boolean;
+  archived_at?: string | null;
+}
+
+const ANY_BOOKING_TYPE = "__any__";
+
+function StartBookingForm({
+  cfg,
+  allNodes,
+  currentKey,
+  onUpdateConfig,
+  t,
+}: {
+  cfg: StartBookingCfg;
+  allNodes: BuilderNode[];
+  currentKey: string;
+  onUpdateConfig: (patch: Record<string, unknown>) => void;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const { types, loaded } = useBookingTypes();
+  const selected = cfg.booking_type_id ?? "";
+  // Keep a type that was picked earlier but has since been archived /
+  // deactivated visible, so the select doesn't silently show "Any".
+  const missingSelected =
+    selected !== "" && loaded && !types.some((bt) => bt.id === selected);
+  // Base UI's Select.Value shows the raw value (a UUID here) unless it
+  // is given the label to render.
+  const selectedLabel =
+    selected === ""
+      ? t("anyBookingType")
+      : (types.find((bt) => bt.id === selected)?.name ?? `${selected.slice(0, 8)}…`);
+
+  return (
+    <>
+      <div>
+        <label className="mb-1 block text-xs text-muted-foreground">
+          {t("bookingTypeLabel")}
+        </label>
+        <Select
+          value={selected || ANY_BOOKING_TYPE}
+          onValueChange={(v) =>
+            onUpdateConfig({ booking_type_id: v === ANY_BOOKING_TYPE ? "" : v })
+          }
+        >
+          <SelectTrigger className="bg-muted">
+            <SelectValue>{selectedLabel}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANY_BOOKING_TYPE}>{t("anyBookingType")}</SelectItem>
+            {types.map((bt) => (
+              <SelectItem key={bt.id} value={bt.id}>
+                {bt.name}
+              </SelectItem>
+            ))}
+            {missingSelected && (
+              <SelectItem value={selected}>
+                <span className="font-mono text-xs">{selected.slice(0, 8)}…</span>
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        {loaded && types.length === 0 && (
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {t("noBookingTypes")}
+          </p>
+        )}
+      </div>
+      <TextRow
+        label={t("startBookingText")}
+        value={cfg.text ?? ""}
+        onChange={(v) => onUpdateConfig({ text: v })}
+        rows={3}
+      />
+      <NextNodeRow
+        value={cfg.next_node_key ?? ""}
+        allNodes={allNodes}
+        currentKey={currentKey}
+        onChange={(v) => onUpdateConfig({ next_node_key: v })}
+        label={t("afterBookingAdvance")}
+      />
+      <p className="text-[10px] text-muted-foreground">{t("startBookingHelp")}</p>
+    </>
+  );
+}
+
+/** Active, non-archived booking types for the account. */
+function useBookingTypes(): { types: BookingTypeOption[]; loaded: boolean } {
+  const [types, setTypes] = useState<BookingTypeOption[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/booking-types").catch(() => null);
+        if (!res || !res.ok) return;
+        const json = (await res.json()) as { booking_types?: BookingTypeOption[] };
+        if (!cancelled) {
+          setTypes(
+            (json.booking_types ?? []).filter(
+              (bt) => bt.is_active !== false && !bt.archived_at,
+            ),
+          );
+        }
+      } catch {
+        // Endpoint absent — the "Any booking type" option still works.
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return { types, loaded };
 }
 
 // ============================================================
