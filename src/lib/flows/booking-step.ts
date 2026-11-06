@@ -10,6 +10,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolveConversationReplyCap } from "@/lib/ai/reply-cap-server";
 
 export type BookingAiBlocker =
   | "ai_not_configured"
@@ -34,7 +35,9 @@ export async function bookingAiBlocker(
 ): Promise<BookingAiBlocker | null> {
   const { data: config, error: configErr } = await db
     .from("ai_configs")
-    .select("is_active, auto_reply_enabled, api_key, auto_reply_max_per_conversation")
+    .select(
+      "is_active, auto_reply_enabled, api_key, auto_reply_max_per_conversation, auto_reply_max_testing, testing_numbers",
+    )
     .eq("account_id", accountId)
     .maybeSingle();
   // Fail closed on a lookup error: parking the run on an unknown state
@@ -47,6 +50,8 @@ export async function bookingAiBlocker(
     auto_reply_enabled: boolean;
     api_key: string | null;
     auto_reply_max_per_conversation: number;
+    auto_reply_max_testing: number | null;
+    testing_numbers: string[] | null;
   };
   if (!cfg.is_active || !cfg.api_key) return "ai_not_configured";
   if (!cfg.auto_reply_enabled) return "ai_auto_reply_off";
@@ -80,7 +85,7 @@ export async function bookingAiBlocker(
   if (!conversationId) return "conversation_missing";
   const { data: conv, error: convErr } = await db
     .from("conversations")
-    .select("assigned_agent_id, ai_autoreply_disabled, ai_reply_count")
+    .select("assigned_agent_id, ai_autoreply_disabled, ai_reply_count, contact_id")
     .eq("id", conversationId)
     .maybeSingle();
   if (convErr) return "lookup_failed";
@@ -89,10 +94,22 @@ export async function bookingAiBlocker(
     assigned_agent_id: string | null;
     ai_autoreply_disabled: boolean | null;
     ai_reply_count: number | null;
+    contact_id: string | null;
   };
   if (c.assigned_agent_id) return "agent_assigned";
   if (c.ai_autoreply_disabled) return "ai_disabled_for_conversation";
-  if ((c.ai_reply_count ?? 0) >= cfg.auto_reply_max_per_conversation) {
+  // Same cap selection as the auto-reply: testing numbers get the
+  // testing cap, everyone else the customer cap.
+  const replyCap = await resolveConversationReplyCap(
+    db,
+    {
+      customerCap: cfg.auto_reply_max_per_conversation,
+      testingCap: cfg.auto_reply_max_testing,
+      testingNumbers: cfg.testing_numbers,
+    },
+    c.contact_id,
+  );
+  if ((c.ai_reply_count ?? 0) >= replyCap) {
     return "ai_reply_cap_reached";
   }
   return null;

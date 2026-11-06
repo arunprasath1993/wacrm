@@ -24,7 +24,12 @@ export interface AiConfig {
   systemPrompt: string | null
   isActive: boolean
   autoReplyEnabled: boolean
+  /** Reply cap for customer conversations (any whole number >= 1). */
   autoReplyMaxPerConversation: number
+  /** Reply cap when the contact is on `testingNumbers`. */
+  autoReplyMaxTesting: number
+  /** Admin-managed testing numbers, E.164 (`+919876543210`). */
+  testingNumbers: string[]
   /** Where auto-reply hands a conversation off when the model bails: an
    *  agent's `auth.users.id`, or null to leave it unassigned (drop into
    *  the shared queue). */

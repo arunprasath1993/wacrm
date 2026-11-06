@@ -75,6 +75,10 @@ function setup(opts: {
   bookingNext?: string;
   autoReply?: boolean;
   assignedAgent?: string | null;
+  replyCount?: number;
+  customerCap?: number;
+  testingNumbers?: string[];
+  contactPhone?: string;
 } = {}) {
   h.tables = {
     flows: [structuredClone(FLOW)],
@@ -104,7 +108,9 @@ function setup(opts: {
         is_active: true,
         api_key: "enc",
         auto_reply_enabled: opts.autoReply ?? true,
-        auto_reply_max_per_conversation: 10,
+        auto_reply_max_per_conversation: opts.customerCap ?? 10,
+        auto_reply_max_testing: 1000,
+        testing_numbers: opts.testingNumbers ?? [],
       },
     ],
     booking_types: [
@@ -117,9 +123,11 @@ function setup(opts: {
         status: "open",
         assigned_agent_id: opts.assignedAgent ?? null,
         ai_autoreply_disabled: false,
-        ai_reply_count: 0,
+        ai_reply_count: opts.replyCount ?? 0,
+        contact_id: "ct-1",
       },
     ],
+    contacts: [{ id: "ct-1", phone: opts.contactPhone ?? "919000000001" }],
   };
 }
 
@@ -217,6 +225,33 @@ describe("start_booking node", () => {
     });
     await dispatch(tapBook);
     expect(run()).toMatchObject({ status: "handed_off" });
+  });
+
+  it("hands off when a customer number has hit the customer cap", async () => {
+    setup({ replyCount: 10, testingNumbers: ["+919876543210"] });
+    const result = await dispatch(tapBook);
+    expect(result).toMatchObject({ consumed: true, outcome: "handed_off" });
+    expect(run()).toMatchObject({
+      status: "handed_off",
+      end_reason: "booking_ai_unavailable",
+    });
+  });
+
+  it("parks a testing number past the customer cap (testing cap applies)", async () => {
+    setup({
+      replyCount: 10,
+      testingNumbers: ["9876543210"],
+      contactPhone: "919876543210",
+    });
+    const result = await dispatch(tapBook);
+    expect(result).toMatchObject({ consumed: true, outcome: "advanced" });
+    expect(run()).toMatchObject({ status: "active", current_node_key: "booking" });
+  });
+
+  it("parks under a large customer cap like 20000", async () => {
+    setup({ replyCount: 19999, customerCap: 20000 });
+    const result = await dispatch(tapBook);
+    expect(result).toMatchObject({ consumed: true, outcome: "advanced" });
   });
 
   it("hands off when the account has no active booking types", async () => {

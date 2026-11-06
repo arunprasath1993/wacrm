@@ -4,6 +4,7 @@ const h = vi.hoisted(() => ({
   stored: null as Record<string, unknown> | null,
   validateCalls: [] as { provider: string; apiKey: string; baseUrl: string | null }[],
   updates: [] as Record<string, unknown>[],
+  minRoles: [] as string[],
 }))
 
 vi.mock('next/server', () => ({
@@ -19,7 +20,7 @@ vi.mock('@/lib/auth/account', () => ({
   getCurrentAccount: async () => {
     throw new Error('not used')
   },
-  requireRole: async () => ({
+  requireRole: async (min: string) => (h.minRoles.push(min), {
     accountId: 'acc-1',
     userId: 'user-1',
     role: 'admin',
@@ -76,6 +77,7 @@ beforeEach(() => {
   __resetRateLimitForTests()
   h.validateCalls = []
   h.updates = []
+  h.minRoles = []
   h.stored = {
     id: 'cfg-1',
     provider: 'openai_compatible',
@@ -133,5 +135,75 @@ describe('POST /api/ai/config stored key reuse', () => {
       { provider: 'openai_compatible', apiKey: 'new-key', baseUrl: 'https://1.1.1.1/v1' },
     ])
     expect(h.updates[0]).toMatchObject({ base_url: 'https://1.1.1.1/v1', api_key: 'enc:new-key' })
+  })
+})
+
+describe('POST /api/ai/config reply caps and testing numbers', () => {
+  const base = { provider: 'openai_compatible', model: 'm', base_url: 'https://8.8.8.8/v1' }
+
+  it('requires admin+ (owner/admin) to save', async () => {
+    await post({ ...base, auto_reply_max_per_conversation: 50 })
+    expect(h.minRoles).toEqual(['admin'])
+  })
+
+  it.each([21, 1000, 10000, 20000])('stores a customer cap of %i unclamped', async (cap) => {
+    const res = await post({ ...base, auto_reply_max_per_conversation: cap })
+    expect(res.status).toBe(200)
+    expect(h.updates[0]).toMatchObject({ auto_reply_max_per_conversation: cap })
+  })
+
+  it.each([0, -5, 2.5, 'ten', null])('rejects a customer cap of %j instead of clamping', async (cap) => {
+    const res = await post({ ...base, auto_reply_max_per_conversation: cap })
+    expect(res.status).toBe(400)
+    expect(h.updates).toHaveLength(0)
+  })
+
+  it('stores the testing cap', async () => {
+    const res = await post({ ...base, auto_reply_max_testing: 20000 })
+    expect(res.status).toBe(200)
+    expect(h.updates[0]).toMatchObject({ auto_reply_max_testing: 20000 })
+  })
+
+  it('rejects an invalid testing cap', async () => {
+    const res = await post({ ...base, auto_reply_max_testing: 0 })
+    expect(res.status).toBe(400)
+    expect(h.updates).toHaveLength(0)
+  })
+
+  it('leaves caps and testing numbers untouched when not sent', async () => {
+    const res = await post(base)
+    expect(res.status).toBe(200)
+    expect(h.updates[0]).not.toHaveProperty('auto_reply_max_per_conversation')
+    expect(h.updates[0]).not.toHaveProperty('auto_reply_max_testing')
+    expect(h.updates[0]).not.toHaveProperty('testing_numbers')
+  })
+
+  it('normalizes testing numbers to E.164', async () => {
+    const res = await post({
+      ...base,
+      testing_numbers: ['98765 43210', '+1 (415) 555-1212', ''],
+    })
+    expect(res.status).toBe(200)
+    expect(h.updates[0]).toMatchObject({
+      testing_numbers: ['+919876543210', '+14155551212'],
+    })
+  })
+
+  it('rejects duplicate testing numbers', async () => {
+    const res = await post({ ...base, testing_numbers: ['+919876543210', '09876543210'] })
+    expect(res.status).toBe(400)
+    expect(h.updates).toHaveLength(0)
+  })
+
+  it('rejects an invalid testing number', async () => {
+    const res = await post({ ...base, testing_numbers: ['12'] })
+    expect(res.status).toBe(400)
+    expect(h.updates).toHaveLength(0)
+  })
+
+  it('clears the testing list with an empty array', async () => {
+    const res = await post({ ...base, testing_numbers: [] })
+    expect(res.status).toBe(200)
+    expect(h.updates[0]).toMatchObject({ testing_numbers: [] })
   })
 })

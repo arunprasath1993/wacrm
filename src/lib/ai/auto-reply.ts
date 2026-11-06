@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './admin-client'
 import { loadAiConfig } from './config'
+import { resolveConversationReplyCap } from './reply-cap-server'
 import { buildConversationContext } from './context'
 import { retrieveKnowledge } from './knowledge'
 import { generateReply } from './generate'
@@ -111,9 +112,19 @@ export async function dispatchInboundToAiReply(
     if (convErr || !conv) return
     if (conv.assigned_agent_id) return // a human owns this thread
     if (conv.ai_autoreply_disabled) return // handed off / turned off here
+    // Testing numbers get their own cap; everyone else the customer cap.
+    const replyCap = await resolveConversationReplyCap(
+      db,
+      {
+        customerCap: config.autoReplyMaxPerConversation,
+        testingCap: config.autoReplyMaxTesting,
+        testingNumbers: config.testingNumbers,
+      },
+      contactId,
+    )
     // Cheap early-out; the authoritative cap check is the atomic claim
     // below (this read can race a concurrent inbound).
-    if (conv.ai_reply_count >= config.autoReplyMaxPerConversation) return
+    if (conv.ai_reply_count >= replyCap) return
 
     const messages = await buildConversationContext(db, conversationId)
     if (messages.length === 0) return
@@ -384,7 +395,7 @@ export async function dispatchInboundToAiReply(
       'claim_ai_reply_slot',
       {
         conversation_id: conversationId,
-        max_replies: config.autoReplyMaxPerConversation,
+        max_replies: replyCap,
       },
     )
     if (claimErr) {
