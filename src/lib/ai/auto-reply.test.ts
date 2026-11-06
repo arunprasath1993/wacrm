@@ -868,3 +868,41 @@ describe('dispatchInboundToAiReply — handoff', () => {
     })
   })
 })
+
+describe('dispatchInboundToAiReply — bot-loop guard', () => {
+  it('pauses the thread without calling the model when the sender is a bot', async () => {
+    h.buildConversationContext.mockResolvedValue([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'Hello! How can I help?' },
+      {
+        role: 'user',
+        content:
+          'I can assist only with Vi services.\n\n1. Contact Vi Support\n\nTo make selection, please reply with the option number.',
+      },
+    ])
+
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.generateReply).not.toHaveBeenCalled()
+    expect(h.retrieveKnowledge).not.toHaveBeenCalled()
+    expect(h.sendTypingIndicator).not.toHaveBeenCalled()
+    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.state.updatePayload).toMatchObject({ ai_autoreply_disabled: true })
+    expect(h.state.updatePayload).not.toHaveProperty('assigned_agent_id')
+    expect(String(h.state.updatePayload?.ai_handoff_summary)).toContain('automated bot')
+    expect(h.settleBookingStep).toHaveBeenCalledWith({
+      accountId: 'acct-1',
+      contactId: 'contact-1',
+      result: 'handed_off',
+    })
+  })
+
+  it('replies normally to a human customer', async () => {
+    h.retrieveKnowledge.mockClear()
+    await dispatchInboundToAiReply(ARGS)
+
+    expect(h.generateReply).toHaveBeenCalled()
+    expect(h.engineSendText).toHaveBeenCalled()
+    expect(h.state.updatePayload).toBeNull()
+  })
+})

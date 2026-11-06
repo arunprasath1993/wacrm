@@ -40,6 +40,28 @@ export function buildHandoffSummary(args: {
   return `${base} Last customer message: “${quote}”`
 }
 
+/**
+ * Internal note left when the bot-loop guard pauses the AI because the
+ * other side is an automated responder, e.g.:
+ *   "🤖 AI paused: the other side looks like an automated bot (menu
+ *    prompt). Last message: “…”"
+ */
+export function buildBotPauseSummary(args: {
+  messages: ChatMessage[]
+  reason: string
+}): string {
+  const { messages, reason } = args
+  const base = `🤖 AI paused: the other side looks like an automated bot (${reason}). Re-enable AI replies here if this is a real customer.`
+
+  const lastCustomer = [...messages]
+    .reverse()
+    .find((m) => m.role === 'user' && m.content.trim())
+  if (!lastCustomer) return base
+
+  const quote = truncate(lastCustomer.content.trim(), MAX_QUOTE_LEN)
+  return `${base} Last message: “${quote}”`
+}
+
 function truncate(text: string, max: number): string {
   const collapsed = text.replace(/\s+/g, ' ')
   if (collapsed.length <= max) return collapsed

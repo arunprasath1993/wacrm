@@ -106,7 +106,7 @@ export function buildSystemPrompt(args: {
 
   if (mode === 'auto_reply') {
     parts.push(
-      `You are replying automatically with no human in the loop. If you cannot confidently and safely help — the customer explicitly asks for a human, is upset or complaining, or the request needs information you do not have — reply with exactly ${HANDOFF_SENTINEL} and nothing else. A human agent will then take over. Prefer handing off over guessing.`,
+      `You are replying automatically with no human in the loop. If you cannot confidently and safely help — the customer explicitly asks for a human, is upset or complaining, or the request needs information you do not have — reply with exactly ${HANDOFF_SENTINEL} and nothing else. A human agent will then take over. Prefer handing off over guessing. Also reply with exactly ${HANDOFF_SENTINEL} if the other side appears to be an automated system rather than a person — for example it sends numbered menus, asks you to reply with an option number, or keeps answering with canned text that ignores what you said — so two bots never keep messaging each other.`,
     )
     const bookingProtocol = bookingProtocolSection(bookingTypes ?? [], availability)
     if (bookingProtocol) {
