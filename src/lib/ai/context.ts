@@ -25,7 +25,11 @@ export async function buildConversationContext(
     .from('messages')
     .select('sender_type, content_text')
     .eq('conversation_id', conversationId)
-    .eq('content_type', 'text')
+    // 'interactive' = button / list taps (incl. template quick-reply taps)
+    // and outbound button messages; 'template' = broadcast/marketing
+    // templates. Without these the bot never sees the message the
+    // customer is reacting to, nor the tap itself.
+    .in('content_type', ['text', 'interactive', 'template'])
     .order('created_at', { ascending: false })
     .limit(limit)
 

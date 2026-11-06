@@ -955,12 +955,17 @@ async function processMessage(
     }).catch((err) => console.error('[automations] dispatch failed:', err))
   }
 
-  // AI auto-reply. Runs only for plain-text inbound the deterministic
-  // flow runner did NOT consume (flows win over the LLM), and only when
-  // the account has enabled it. Awaited inside `after()` (same reason as
-  // the webhook dispatch below); `dispatchInboundToAiReply` owns its
-  // eligibility gates + try/catch and never throws.
-  if (!contentConsumed && !interactiveReplyId && inboundText.trim()) {
+  // AI auto-reply. Runs for inbound text AND button/list taps (including
+  // template quick-reply taps like "Book Free Demo") that the
+  // deterministic flow runner / a waiting automation did NOT consume
+  // (those win over the LLM), and only when the account has enabled it.
+  // A tap that an active `interactive_reply` automation handles is
+  // skipped inside the dispatcher. Previously every tap was excluded
+  // here, so buttons on broadcast templates got no reply at all.
+  // Awaited inside `after()` (same reason as the webhook dispatch below);
+  // `dispatchInboundToAiReply` owns its eligibility gates + try/catch and
+  // never throws.
+  if (!contentConsumed && inboundText.trim()) {
     await dispatchInboundToAiReply({
       accountId,
       conversationId: conversation.id,
@@ -972,6 +977,7 @@ async function processMessage(
       // Lets the bot ignore keyword automations that don't match this
       // message (an active STOP opt-out must not mute replies to "Hi").
       inboundText,
+      interactiveReplyId: interactiveReplyId ?? undefined,
     })
     // Where the bot isn't running this chat a human is, and what they
     // agree still needs recording. Never throws.
