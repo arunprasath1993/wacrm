@@ -26,6 +26,8 @@ import {
   settleBookingStep,
 } from '@/lib/flows/engine'
 import type { AiConfig, AiUsage, ChatMessage } from './types'
+import type { Automation } from '@/types'
+import { triggerMatches } from '@/lib/automations/trigger-match'
 
 /** Sent when the model recorded a booking but wrote no message with it. */
 const BOOKING_SAVED_FALLBACK =
@@ -43,6 +45,11 @@ interface DispatchArgs {
    *  a typing indicator (which also marks it read) is shown while the
    *  reply is generated. Optional so older callers keep working. */
   inboundMessageId?: string
+  /** Text of the inbound message. When set, the bot stands down only for
+   *  a message-level automation that actually matches it (a STOP
+   *  keyword automation no longer silences the bot for "Hi"). When
+   *  omitted, any active message-level automation stands it down. */
+  inboundText?: string
 }
 
 /**
@@ -74,6 +81,7 @@ export async function dispatchInboundToAiReply(
     contactId,
     configOwnerUserId,
     inboundMessageId,
+    inboundText,
   } = args
 
   // Set once a booking is saved for a Flow's "Start booking" step, so a
@@ -95,14 +103,26 @@ export async function dispatchInboundToAiReply(
     // avoid double-texting the customer. (Relationship triggers like
     // `first_inbound_message` don't count — they're not per-message
     // auto-responders.)
+    //
+    // Only a responder that actually fires for THIS message counts: a
+    // keyword automation (e.g. a STOP opt-out) used to silence the bot
+    // for every inbound just by being active, even when the keyword
+    // didn't match. `new_message_received` fires on everything, so it
+    // still always stands the bot down.
     const { data: autoResponders } = await db
       .from('automations')
-      .select('id')
+      .select('id, trigger_type, trigger_config')
       .eq('account_id', accountId)
       .eq('is_active', true)
       .in('trigger_type', ['new_message_received', 'keyword_match'])
-      .limit(1)
-    if (autoResponders && autoResponders.length > 0) return
+      .limit(50)
+    const respondsToThisMessage = (autoResponders ?? []).some(
+      (a) =>
+        inboundText === undefined ||
+        a.trigger_type !== 'keyword_match' ||
+        triggerMatches(a as Automation, { message_text: inboundText }),
+    )
+    if (respondsToThisMessage) return
 
     const { data: conv, error: convErr } = await db
       .from('conversations')

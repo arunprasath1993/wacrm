@@ -19,7 +19,11 @@ const h = vi.hoisted(() => ({
   settleBookingStep: vi.fn(),
   state: {
     conv: null as Record<string, unknown> | null,
-    autoResponders: [] as { id: string }[],
+    autoResponders: [] as {
+      id: string
+      trigger_type?: string
+      trigger_config?: Record<string, unknown>
+    }[],
     claim: true as boolean,
     claimError: null as { message: string } | null,
     rpcRejects: false as boolean,
@@ -715,6 +719,37 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.generateReply).not.toHaveBeenCalled()
     expect(h.engineSendText).not.toHaveBeenCalled()
     expect(h.sendTypingIndicator).not.toHaveBeenCalled()
+  })
+
+  it('replies when an active keyword automation does not match the message', async () => {
+    h.state.autoResponders = [
+      {
+        id: 'stop-optout',
+        trigger_type: 'keyword_match',
+        trigger_config: { keywords: ['STOP', 'unsubscribe'], match_type: 'exact' },
+      },
+    ]
+    await dispatchInboundToAiReply({ ...ARGS, inboundText: 'Hi' })
+    expect(h.generateReply).toHaveBeenCalled()
+  })
+
+  it('stands down when an active keyword automation matches the message', async () => {
+    h.state.autoResponders = [
+      {
+        id: 'stop-optout',
+        trigger_type: 'keyword_match',
+        trigger_config: { keywords: ['STOP'], match_type: 'exact' },
+      },
+    ]
+    await dispatchInboundToAiReply({ ...ARGS, inboundText: 'stop' })
+    expect(h.generateReply).not.toHaveBeenCalled()
+    expect(h.engineSendText).not.toHaveBeenCalled()
+  })
+
+  it('stands down for an active new_message_received automation whatever the text', async () => {
+    h.state.autoResponders = [{ id: 'every-msg', trigger_type: 'new_message_received' }]
+    await dispatchInboundToAiReply({ ...ARGS, inboundText: 'Hi' })
+    expect(h.generateReply).not.toHaveBeenCalled()
   })
 
   it('does not send when the atomic slot claim loses the race', async () => {
