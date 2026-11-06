@@ -4,7 +4,8 @@ import { buildConversationContext } from './context'
 import { retrieveKnowledge } from './knowledge'
 import { generateReply } from './generate'
 import { buildSystemPrompt } from './defaults'
-import { buildHandoffSummary } from './handoff'
+import { buildBotPauseSummary, buildHandoffSummary } from './handoff'
+import { detectAutomatedSender } from './bot-detect'
 import { logAiUsage } from './usage'
 import { latestUserMessage } from './query'
 import {
@@ -57,6 +58,7 @@ interface DispatchArgs {
  *   - auto-reply was disabled for this conversation (prior handoff)
  *   - the per-conversation reply cap is reached
  *   - there's nothing to reply to
+ *   - the other side is an automated responder (also pauses the thread)
  *
  * The 24h WhatsApp session window is inherently open here — we're
  * reacting to a customer message that just landed — so no separate
@@ -115,6 +117,30 @@ export async function dispatchInboundToAiReply(
 
     const messages = await buildConversationContext(db, conversationId)
     if (messages.length === 0) return
+
+    // Bot-loop guard: the other side is an automated responder (an IVR
+    // menu, another company's chatbot). Answering it would loop forever
+    // on the owner's key, so pause the bot here before any LLM call. No
+    // agent is assigned — there is no person to help — but the note
+    // explains the pause to whoever opens the thread.
+    const automated = detectAutomatedSender(messages)
+    if (automated) {
+      await settleBookingStep({ accountId, contactId, result: 'handed_off' })
+      await db
+        .from('conversations')
+        .update({
+          ai_autoreply_disabled: true,
+          ai_handoff_summary: buildBotPauseSummary({
+            messages,
+            reason: automated.reason,
+          }),
+        })
+        .eq('id', conversationId)
+      console.info(
+        `[ai auto-reply] paused on conversation ${conversationId}: automated sender (${automated.reason}).`,
+      )
+      return
+    }
 
     // Account-wide throttle on the shared BYO key. The per-conversation
     // cap bounds one thread; this bounds a burst across many threads (a

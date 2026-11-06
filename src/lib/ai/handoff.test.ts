@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildHandoffSummary } from './handoff'
+import { buildBotPauseSummary, buildHandoffSummary } from './handoff'
 
 describe('buildHandoffSummary', () => {
   it('notes the reply count and quotes the last customer message', () => {
@@ -62,5 +62,19 @@ describe('buildHandoffSummary', () => {
       replyCount: 0,
     })
     expect(summary).toBe('🤖 AI agent handed off without replying.')
+  })
+})
+
+describe('buildBotPauseSummary', () => {
+  it('names the reason and quotes the last customer message', () => {
+    const summary = buildBotPauseSummary({
+      messages: [
+        { role: 'user', content: 'Invalid option.' },
+        { role: 'assistant', content: 'Sorry?' },
+      ],
+      reason: 'menu error ("invalid option")',
+    })
+    expect(summary).toContain('automated bot (menu error ("invalid option"))')
+    expect(summary).toContain('Last message: “Invalid option.”')
   })
 })
