@@ -50,6 +50,10 @@ interface DispatchArgs {
    *  keyword automation no longer silences the bot for "Hi"). When
    *  omitted, any active message-level automation stands it down. */
   inboundText?: string
+  /** Button / list-row id (or template quick-reply payload) when the
+   *  inbound is a tap. The bot then stands down only if an active
+   *  `interactive_reply` automation matches this id. */
+  interactiveReplyId?: string
 }
 
 /**
@@ -82,6 +86,7 @@ export async function dispatchInboundToAiReply(
     configOwnerUserId,
     inboundMessageId,
     inboundText,
+    interactiveReplyId,
   } = args
 
   // Set once a booking is saved for a Flow's "Start booking" step, so a
@@ -114,14 +119,28 @@ export async function dispatchInboundToAiReply(
       .select('id, trigger_type, trigger_config')
       .eq('account_id', accountId)
       .eq('is_active', true)
-      .in('trigger_type', ['new_message_received', 'keyword_match'])
+      .in('trigger_type', [
+        'new_message_received',
+        'keyword_match',
+        'interactive_reply',
+      ])
       .limit(50)
-    const respondsToThisMessage = (autoResponders ?? []).some(
-      (a) =>
+    const respondsToThisMessage = (autoResponders ?? []).some((a) => {
+      if (a.trigger_type === 'interactive_reply') {
+        // Only a button automation wired to THIS tap stands the bot down.
+        return (
+          !!interactiveReplyId &&
+          triggerMatches(a as Automation, {
+            interactive_reply_id: interactiveReplyId,
+          })
+        )
+      }
+      return (
         inboundText === undefined ||
         a.trigger_type !== 'keyword_match' ||
-        triggerMatches(a as Automation, { message_text: inboundText }),
-    )
+        triggerMatches(a as Automation, { message_text: inboundText })
+      )
+    })
     if (respondsToThisMessage) return
 
     const { data: conv, error: convErr } = await db
