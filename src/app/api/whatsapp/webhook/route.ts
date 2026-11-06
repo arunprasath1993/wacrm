@@ -969,6 +969,9 @@ async function processMessage(
       // Lets the bot show "typing…" (and mark the message read) while
       // the reply is generated.
       inboundMessageId: message.id,
+      // Lets the bot ignore keyword automations that don't match this
+      // message (an active STOP opt-out must not mute replies to "Hi").
+      inboundText,
     })
     // Where the bot isn't running this chat a human is, and what they
     // agree still needs recording. Never throws.
