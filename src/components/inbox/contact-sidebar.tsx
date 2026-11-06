@@ -15,8 +15,20 @@ import {
   DollarSign,
   StickyNote,
   Plus,
+  Bot,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useCan } from "@/hooks/use-can";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ContactBookings } from "@/components/bookings/contact-bookings";
 import { format } from "date-fns";
@@ -25,9 +37,11 @@ import { contactHandle } from "@/lib/whatsapp/wa-identity";
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  /** The open conversation; enables the admin "Reset bot reply count" action. */
+  conversationId?: string | null;
 }
 
-export function ContactSidebar({ contact }: ContactSidebarProps) {
+export function ContactSidebar({ contact, conversationId }: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
 
@@ -38,6 +52,10 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  // Owner/Admin only (the API enforces this too).
+  const canResetReplyCount = useCan("edit-settings");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const fetchContactData = useCallback(async () => {
     if (!contact) return;
@@ -123,6 +141,28 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     }
     setAddingNote(false);
   }, [contact, newNote, accountId]);
+
+  const handleResetReplyCount = useCallback(async () => {
+    if (!conversationId) return;
+    setResetting(true);
+    try {
+      const res = await fetch(
+        `/api/ai/autoreply/${encodeURIComponent(conversationId)}/reset-count`,
+        { method: "POST" },
+      );
+      if (res.ok) {
+        toast.success(tSidebar("resetReplyCountSuccess"));
+        setResetOpen(false);
+      } else {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error ?? tSidebar("resetReplyCountFailed"));
+      }
+    } catch {
+      toast.error(tSidebar("resetReplyCountFailed"));
+    } finally {
+      setResetting(false);
+    }
+  }, [conversationId, tSidebar]);
 
   if (!contact) {
     return (
@@ -262,6 +302,54 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           <div className="my-4 border-t border-border" />
 
           <ContactBookings contact={contact} />
+
+          {canResetReplyCount && conversationId && (
+            <>
+              <div>
+                <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <Bot className="h-3 w-3" />
+                  {tSidebar("aiBot")}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 w-full"
+                  onClick={() => setResetOpen(true)}
+                >
+                  {tSidebar("resetReplyCount")}
+                </Button>
+              </div>
+
+              <Dialog open={resetOpen} onOpenChange={(o) => !resetting && setResetOpen(o)}>
+                <DialogContent className="border-border bg-popover sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-popover-foreground">
+                      {tSidebar("resetReplyCountTitle")}
+                    </DialogTitle>
+                    <DialogDescription className="text-muted-foreground">
+                      {tSidebar("resetReplyCountDesc")}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setResetOpen(false)}
+                      disabled={resetting}
+                    >
+                      {tSidebar("resetReplyCountCancel")}
+                    </Button>
+                    <Button onClick={handleResetReplyCount} disabled={resetting}>
+                      {resetting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+                      {tSidebar("resetReplyCountConfirm")}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Divider */}
+              <div className="my-4 border-t border-border" />
+            </>
+          )}
 
           {/* Notes */}
           <div>

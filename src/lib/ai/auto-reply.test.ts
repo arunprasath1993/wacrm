@@ -27,6 +27,8 @@ const h = vi.hoisted(() => ({
     updatePayload: null as Record<string, unknown> | null,
     rpcCalls: [] as { name: string; args: unknown }[],
     latestInbound: [] as { message_id: string }[],
+    contactPhone: null as string | null,
+    contactLookups: 0,
   },
 }))
 
@@ -63,6 +65,19 @@ vi.mock('./admin-client', () => ({
           in: () => chain,
           limit: () =>
             Promise.resolve({ data: h.state.autoResponders, error: null }),
+        }
+        return chain
+      }
+      if (table === 'contacts') {
+        h.state.contactLookups += 1
+        const chain = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: () =>
+            Promise.resolve({
+              data: h.state.contactPhone === null ? null : { phone: h.state.contactPhone },
+              error: null,
+            }),
         }
         return chain
       }
@@ -124,6 +139,8 @@ function aiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
     isActive: true,
     autoReplyEnabled: true,
     autoReplyMaxPerConversation: 3,
+    autoReplyMaxTesting: 1000,
+    testingNumbers: [],
     handoffAgentId: null,
     embeddingsApiKey: null,
     ...overrides,
@@ -144,6 +161,8 @@ beforeEach(() => {
   h.state.updatePayload = null
   h.state.rpcCalls = []
   h.state.latestInbound = [{ message_id: 'wamid.inbound-1' }]
+  h.state.contactPhone = '919000000001'
+  h.state.contactLookups = 0
   h.loadAiConfig.mockResolvedValue(aiConfig())
   h.buildConversationContext.mockResolvedValue([{ role: 'user', content: 'hi' }])
   h.retrieveKnowledge.mockResolvedValue([])
@@ -777,6 +796,100 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     expect(h.generateReply).not.toHaveBeenCalled()
     expect(h.engineSendText).not.toHaveBeenCalled()
     expect(h.sendTypingIndicator).not.toHaveBeenCalled()
+  })
+})
+
+describe('dispatchInboundToAiReply — reply cap selection', () => {
+  const TESTING = '+919876543210'
+
+  function convWithCount(count: number) {
+    h.state.conv = {
+      assigned_agent_id: null,
+      ai_autoreply_disabled: false,
+      ai_reply_count: count,
+    }
+  }
+
+  it('uses the customer cap for a customer number', async () => {
+    h.loadAiConfig.mockResolvedValue(
+      aiConfig({ autoReplyMaxPerConversation: 20, autoReplyMaxTesting: 1000, testingNumbers: [TESTING] }),
+    )
+    convWithCount(20)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.engineSendText).not.toHaveBeenCalled()
+    expect(h.state.rpcCalls).toHaveLength(0)
+  })
+
+  it('uses the testing cap for a testing number', async () => {
+    h.loadAiConfig.mockResolvedValue(
+      aiConfig({ autoReplyMaxPerConversation: 20, autoReplyMaxTesting: 1000, testingNumbers: [TESTING] }),
+    )
+    h.state.contactPhone = '919876543210'
+    convWithCount(20)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.state.rpcCalls).toEqual([
+      { name: 'claim_ai_reply_slot', args: { conversation_id: 'conv-1', max_replies: 1000 } },
+    ])
+    expect(h.engineSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['+91 98765 43210', '09876543210', '9876543210'])(
+    'matches a testing number stored in another format (%s)',
+    async (listed) => {
+      h.loadAiConfig.mockResolvedValue(
+        aiConfig({ autoReplyMaxPerConversation: 20, autoReplyMaxTesting: 1000, testingNumbers: [listed] }),
+      )
+      h.state.contactPhone = '919876543210'
+      convWithCount(20)
+      await dispatchInboundToAiReply(ARGS)
+      expect(h.state.rpcCalls[0]?.args).toEqual({ conversation_id: 'conv-1', max_replies: 1000 })
+    },
+  )
+
+  it('stops a testing number once the testing cap is reached', async () => {
+    h.loadAiConfig.mockResolvedValue(
+      aiConfig({ autoReplyMaxPerConversation: 20, autoReplyMaxTesting: 1000, testingNumbers: [TESTING] }),
+    )
+    h.state.contactPhone = '919876543210'
+    convWithCount(1000)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.engineSendText).not.toHaveBeenCalled()
+  })
+
+  it('passes a large customer cap like 20000 to the slot claim', async () => {
+    h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyMaxPerConversation: 20000 }))
+    convWithCount(19999)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.state.rpcCalls).toEqual([
+      { name: 'claim_ai_reply_slot', args: { conversation_id: 'conv-1', max_replies: 20000 } },
+    ])
+    expect(h.engineSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it('replies again after the count is reset to 0', async () => {
+    h.loadAiConfig.mockResolvedValue(aiConfig({ autoReplyMaxPerConversation: 20 }))
+    convWithCount(20)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.engineSendText).not.toHaveBeenCalled()
+
+    convWithCount(0)
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.engineSendText).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the contact lookup when there are no testing numbers', async () => {
+    h.loadAiConfig.mockResolvedValue(aiConfig({ testingNumbers: [] }))
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.state.contactLookups).toBe(0)
+  })
+
+  it('uses the customer cap for a contact without a phone', async () => {
+    h.loadAiConfig.mockResolvedValue(
+      aiConfig({ autoReplyMaxPerConversation: 20, autoReplyMaxTesting: 1000, testingNumbers: [TESTING] }),
+    )
+    h.state.contactPhone = null
+    await dispatchInboundToAiReply(ARGS)
+    expect(h.state.rpcCalls[0]?.args).toEqual({ conversation_id: 'conv-1', max_replies: 20 })
   })
 })
 

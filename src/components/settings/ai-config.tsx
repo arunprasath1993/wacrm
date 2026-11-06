@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, Trash2, Eye, EyeOff, Plus, X } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { canEditSettings } from '@/lib/auth/roles';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,12 @@ import type { AccountMember } from '@/types';
 import { fetchAccountMembers, memberLabel } from '@/lib/account/members';
 import { useTranslations } from 'next-intl';
 import { invalidateAiAccountStatus } from '@/lib/ai/account-status-cache';
+import {
+  DEFAULT_TESTING_REPLY_CAP,
+  normalizeTestingNumber,
+  normalizeTestingNumbers,
+  parseReplyCap,
+} from '@/lib/ai/reply-cap';
 
 const MASKED_KEY = '••••••••••••••••';
 
@@ -74,7 +80,12 @@ export function AiConfig() {
   const [systemPrompt, setSystemPrompt] = useState('');
   const [isActive, setIsActive] = useState(false);
   const [autoReplyEnabled, setAutoReplyEnabled] = useState(false);
-  const [maxPerConversation, setMaxPerConversation] = useState(3);
+  // Kept as strings so any value can be typed (no clamping); validated
+  // on save.
+  const [maxPerConversation, setMaxPerConversation] = useState('3');
+  const [maxTesting, setMaxTesting] = useState(String(DEFAULT_TESTING_REPLY_CAP));
+  const [testingNumbers, setTestingNumbers] = useState<string[]>([]);
+  const [newTestingNumber, setNewTestingNumber] = useState('');
   // Empty string = leave unassigned (shared queue).
   const [handoffAgentId, setHandoffAgentId] = useState('');
   const [members, setMembers] = useState<AccountMember[]>([]);
@@ -102,7 +113,10 @@ export function AiConfig() {
         setSystemPrompt(data.system_prompt ?? '');
         setIsActive(data.is_active);
         setAutoReplyEnabled(data.auto_reply_enabled);
-        setMaxPerConversation(data.auto_reply_max_per_conversation ?? 3);
+        setMaxPerConversation(String(data.auto_reply_max_per_conversation ?? 3));
+        setMaxTesting(String(data.auto_reply_max_testing ?? DEFAULT_TESTING_REPLY_CAP));
+        setTestingNumbers(Array.isArray(data.testing_numbers) ? data.testing_numbers : []);
+        setNewTestingNumber('');
         setHandoffAgentId(data.handoff_agent_id ?? '');
         setHasStoredKey(Boolean(data.has_key));
         setApiKey(data.has_key ? MASKED_KEY : '');
@@ -155,7 +169,9 @@ export function AiConfig() {
     system_prompt: systemPrompt.trim() || null,
     is_active: isActive,
     auto_reply_enabled: autoReplyEnabled,
-    auto_reply_max_per_conversation: maxPerConversation,
+    auto_reply_max_per_conversation: parseReplyCap(maxPerConversation),
+    auto_reply_max_testing: parseReplyCap(maxTesting),
+    testing_numbers: testingNumbers,
     handoff_agent_id: handoffAgentId || null,
   });
 
@@ -195,6 +211,23 @@ export function AiConfig() {
       toast.error(t('missingApiKey'));
       return;
     }
+    if (parseReplyCap(maxPerConversation) === null) {
+      toast.error(t('replyCapInvalid'));
+      return;
+    }
+    if (parseReplyCap(maxTesting) === null) {
+      toast.error(t('testingReplyCapInvalid'));
+      return;
+    }
+    const numbersCheck = normalizeTestingNumbers(testingNumbers);
+    if (!numbersCheck.ok) {
+      toast.error(
+        numbersCheck.error === 'duplicate'
+          ? t('testingNumberDuplicate', { value: numbersCheck.value })
+          : t('testingNumberInvalid', { value: numbersCheck.value }),
+      );
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/ai/config', {
@@ -215,6 +248,39 @@ export function AiConfig() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Add a testing number: normalized to E.164 (+91 assumed when no
+  // country code is given); invalid or duplicate numbers are refused.
+  const addTestingNumber = () => {
+    const raw = newTestingNumber.trim();
+    if (!raw) return;
+    const e164 = normalizeTestingNumber(raw);
+    if (!e164) {
+      toast.error(t('testingNumberInvalid', { value: raw }));
+      return;
+    }
+    if (testingNumbers.some((n) => normalizeTestingNumber(n) === e164)) {
+      toast.error(t('testingNumberDuplicate', { value: raw }));
+      return;
+    }
+    setTestingNumbers([...testingNumbers, e164]);
+    setNewTestingNumber('');
+  };
+
+  const editTestingNumber = (index: number, value: string) => {
+    setTestingNumbers((prev) => prev.map((n, i) => (i === index ? value : n)));
+  };
+
+  // On blur, show the stored (E.164) form of a valid edit; an invalid
+  // one is left as typed and flagged, and blocks save.
+  const tidyTestingNumber = (index: number) => {
+    const e164 = normalizeTestingNumber(testingNumbers[index]);
+    if (e164) editTestingNumber(index, e164);
+  };
+
+  const removeTestingNumber = (index: number) => {
+    setTestingNumbers((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleRemove = async () => {
@@ -469,23 +535,109 @@ export function AiConfig() {
               <div>
                 <Label htmlFor="ai-max">{t('maxAutoReplies')}</Label>
                 <p className="text-xs text-muted-foreground">
-                  {t('maxAutoRepliesDesc')}
+                  {t('maxAutoRepliesDesc')} {t('replyCapHint')}
                 </p>
               </div>
               <Input
                 id="ai-max"
                 type="number"
+                inputMode="numeric"
                 min={1}
-                max={20}
+                step={1}
                 value={maxPerConversation}
-                onChange={(e) =>
-                  setMaxPerConversation(
-                    Math.min(20, Math.max(1, Number(e.target.value) || 1)),
-                  )
-                }
+                onChange={(e) => setMaxPerConversation(e.target.value)}
+                aria-invalid={parseReplyCap(maxPerConversation) === null}
                 disabled={disabled || !autoReplyEnabled}
-                className="w-20"
+                className="w-28"
               />
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label htmlFor="ai-max-testing">{t('maxAutoRepliesTesting')}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('maxAutoRepliesTestingDesc')} {t('replyCapHint')}
+                </p>
+              </div>
+              <Input
+                id="ai-max-testing"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                value={maxTesting}
+                onChange={(e) => setMaxTesting(e.target.value)}
+                aria-invalid={parseReplyCap(maxTesting) === null}
+                disabled={disabled || !autoReplyEnabled}
+                className="w-28"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ai-testing-new">{t('testingNumbers')}</Label>
+              <p className="text-xs text-muted-foreground">
+                {t('testingNumbersDesc')}
+              </p>
+              {testingNumbers.length === 0 ? (
+                <p className="text-xs italic text-muted-foreground">
+                  {t('testingNumbersEmpty')}
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {testingNumbers.map((num, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <Input
+                        value={num}
+                        onChange={(e) => editTestingNumber(i, e.target.value)}
+                        onBlur={() => tidyTestingNumber(i)}
+                        aria-label={t('testingNumberEdit')}
+                        aria-invalid={normalizeTestingNumber(num) === null}
+                        disabled={disabled}
+                        inputMode="tel"
+                        className="max-w-xs"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeTestingNumber(i)}
+                        disabled={disabled}
+                        aria-label={t('testingNumberRemove')}
+                        title={t('testingNumberRemove')}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex items-center gap-2">
+                <Input
+                  id="ai-testing-new"
+                  value={newTestingNumber}
+                  onChange={(e) => setNewTestingNumber(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addTestingNumber();
+                    }
+                  }}
+                  placeholder="+91 98765 43210"
+                  disabled={disabled}
+                  inputMode="tel"
+                  className="max-w-xs"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addTestingNumber}
+                  disabled={disabled || !newTestingNumber.trim()}
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  {t('testingNumberAdd')}
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-2">

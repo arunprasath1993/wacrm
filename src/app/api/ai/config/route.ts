@@ -12,6 +12,12 @@ import { AiError, type AiProvider } from '@/lib/ai/types'
 import { normalizeOpenAiCompatibleBaseUrl } from '@/lib/ai/providers/openai-compatible'
 import { canReuseStoredAiKey } from '@/lib/ai/stored-key'
 import { getT } from '@/lib/i18n/translate'
+import {
+  DEFAULT_TESTING_REPLY_CAP,
+  REPLY_CAP_STORAGE_MAX,
+  normalizeTestingNumbers,
+  parseReplyCap,
+} from '@/lib/ai/reply-cap'
 
 const t = getT('Api')
 
@@ -35,7 +41,7 @@ export async function GET() {
       // `api_key` is selected only to derive `has_key` — it is stripped
       // out below and never returned to the client.
       .select(
-        'provider, model, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, handoff_agent_id, api_key, embeddings_api_key',
+        'provider, model, base_url, system_prompt, is_active, auto_reply_enabled, auto_reply_max_per_conversation, auto_reply_max_testing, testing_numbers, handoff_agent_id, api_key, embeddings_api_key',
       )
       .eq('account_id', accountId)
       .maybeSingle()
@@ -99,9 +105,40 @@ export async function POST(request: Request) {
     const isActive = body.is_active === true
     const autoReplyEnabled = body.auto_reply_enabled === true
 
-    let maxPer = Number(body.auto_reply_max_per_conversation)
-    if (!Number.isFinite(maxPer)) maxPer = 3
-    maxPer = Math.min(20, Math.max(1, Math.floor(maxPer)))
+    // Reply caps: any whole number >= 1, no business upper limit (the
+    // admin picks). Invalid input is rejected, never clamped. Absent →
+    // left unchanged on update (DB defaults on insert).
+    const maxPerProvided = body.auto_reply_max_per_conversation !== undefined
+    const maxPer = maxPerProvided
+      ? parseReplyCap(body.auto_reply_max_per_conversation)
+      : null
+    if (maxPerProvided && maxPer === null) {
+      return bad(t('ai.replyCapInvalid', { max: REPLY_CAP_STORAGE_MAX }))
+    }
+    const maxTestingProvided = body.auto_reply_max_testing !== undefined
+    const maxTesting = maxTestingProvided
+      ? parseReplyCap(body.auto_reply_max_testing)
+      : null
+    if (maxTestingProvided && maxTesting === null) {
+      return bad(t('ai.testingReplyCapInvalid', { max: REPLY_CAP_STORAGE_MAX }))
+    }
+    // Testing numbers: normalized to E.164, duplicates rejected.
+    const testingNumbersProvided = body.testing_numbers !== undefined
+    let testingNumbers: string[] = []
+    if (testingNumbersProvided) {
+      if (!Array.isArray(body.testing_numbers)) {
+        return bad(t('ai.testingNumbersInvalid'))
+      }
+      const parsed = normalizeTestingNumbers(body.testing_numbers)
+      if (!parsed.ok) {
+        return bad(
+          parsed.error === 'duplicate'
+            ? t('ai.testingNumberDuplicate', { value: parsed.value })
+            : t('ai.testingNumberInvalid', { value: parsed.value }),
+        )
+      }
+      testingNumbers = parsed.numbers
+    }
 
     // Handoff routing target for auto-reply. A non-empty string must be a
     // member of this account (else the conversation would be assigned to a
@@ -189,7 +226,9 @@ export async function POST(request: Request) {
           systemPrompt,
           isActive,
           autoReplyEnabled,
-          autoReplyMaxPerConversation: maxPer,
+          autoReplyMaxPerConversation: maxPer ?? 3,
+          autoReplyMaxTesting: maxTesting ?? DEFAULT_TESTING_REPLY_CAP,
+          testingNumbers,
           handoffAgentId: null,
           embeddingsApiKey: null,
         })
@@ -230,8 +269,10 @@ export async function POST(request: Request) {
       system_prompt: systemPrompt,
       is_active: isActive,
       auto_reply_enabled: autoReplyEnabled,
-      auto_reply_max_per_conversation: maxPer,
     }
+    if (maxPer !== null) shared.auto_reply_max_per_conversation = maxPer
+    if (maxTesting !== null) shared.auto_reply_max_testing = maxTesting
+    if (testingNumbersProvided) shared.testing_numbers = testingNumbers
     // Only touch the handoff target when the form actually sent the field,
     // so a partial save (e.g. flipping a toggle) doesn't wipe it.
     if (handoffProvided) shared.handoff_agent_id = handoffAgentId
