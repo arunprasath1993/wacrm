@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { extractStandbyInbound } from './standby'
 
 /**
  * Opt-in diagnostic trail for the Meta webhook (migration 065).
@@ -76,7 +77,9 @@ export function summarizeWebhook(
     if (!Array.isArray(changes)) continue
     for (const change of changes as LooseChange[]) {
       const value = change?.value ?? {}
-      const messages = Array.isArray(value.messages) ? value.messages : []
+      const messages = Array.isArray(value.messages)
+        ? value.messages
+        : extractStandbyInbound<{ id?: unknown; type?: unknown }, unknown>(value).messages
       rows.push({
         signature_ok: signatureOk,
         field: typeof change?.field === 'string' ? change.field : null,

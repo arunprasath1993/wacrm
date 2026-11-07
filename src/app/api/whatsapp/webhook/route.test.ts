@@ -1265,3 +1265,52 @@ describe('inbound diagnostic log (WEBHOOK_DEBUG_LOG)', () => {
     ])
   })
 })
+
+describe('inbound webhook: standby field (Meta Business Agent holds the thread)', () => {
+  async function runStandby(standby: unknown) {
+    const body = {
+      entry: [
+        {
+          changes: [
+            {
+              field: 'standby',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: { phone_number_id: 'pn-1', display_phone_number: '919000000000' },
+                standby,
+              },
+            },
+          ],
+        },
+      ],
+    }
+    const res = await POST(signedPost(JSON.stringify(body)))
+    for (const cb of h.state.afterCallbacks) await cb()
+    return res
+  }
+
+  const tap = {
+    id: 'wamid.SB1',
+    from: '15551230000',
+    timestamp: '1700000000',
+    type: 'button',
+    button: { text: 'Book Free Demo', payload: 'Book Free Demo' },
+  }
+
+  it('stores a customer tap that arrived on standby with no contacts block', async () => {
+    await runStandby([tap])
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.state.upsertCalls[0].row).toMatchObject({
+      sender_type: 'customer',
+      content_type: 'interactive',
+      content_text: 'Book Free Demo',
+      interactive_reply_id: 'Book Free Demo',
+    })
+    expect(h.dispatchInboundToFlows).toHaveBeenCalled()
+  })
+
+  it("ignores the agent's own outgoing echoes", async () => {
+    await runStandby([{ ...tap, id: 'wamid.SB2', from: '919000000000', to: '15551230000' }])
+    expect(h.state.upsertCalls).toHaveLength(0)
+  })
+})
