@@ -232,6 +232,101 @@ describe('generateReply — Anthropic', () => {
     expect(body.messages[0].role).toBe('user')
     expect(body.messages).toHaveLength(1)
   })
+
+  it('sends system blocks with cache_control only on the stable ones', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(okResponse({ content: [{ type: 'text', text: 'ok' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await generateReply({
+      config: config({ provider: 'anthropic' }),
+      systemPrompt: [
+        { text: 'scaffold', cache: true },
+        { text: 'business', cache: true },
+        { text: 'time + memory' },
+        { text: '' },
+      ],
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.system).toEqual([
+      { type: 'text', text: 'scaffold', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'business', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'time + memory' },
+    ])
+  })
+
+  it('sends a plain string prompt as one cached block', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(okResponse({ content: [{ type: 'text', text: 'ok' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await generateReply({
+      config: config({ provider: 'anthropic' }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.system).toEqual([
+      { type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } },
+    ])
+  })
+
+  it('counts cached tokens in the prompt total and logs the cache usage', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        okResponse({
+          content: [{ type: 'text', text: 'Hi' }],
+          usage: {
+            input_tokens: 50,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 4000,
+            output_tokens: 10,
+          },
+        }),
+      ),
+    )
+
+    const res = await generateReply({
+      config: config({ provider: 'anthropic', model: 'claude-test' }),
+      systemPrompt: 'sys',
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+
+    expect(res.usage).toEqual({ promptTokens: 4050, completionTokens: 10, totalTokens: 4060 })
+    expect(info).toHaveBeenCalledWith('[ai anthropic] usage', {
+      model: 'claude-test',
+      input_tokens: 50,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 4000,
+      output_tokens: 10,
+    })
+    info.mockRestore()
+  })
+})
+
+describe('generateReply — OpenAI system blocks', () => {
+  it('joins blocks into one system message', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okResponse({ choices: [{ message: { content: 'ok' } }] }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await generateReply({
+      config: config({ provider: 'openai' }),
+      systemPrompt: [{ text: 'a', cache: true }, { text: 'b' }],
+      messages: [{ role: 'user', content: 'Hi' }],
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.messages[0]).toEqual({ role: 'system', content: 'a\n\nb' })
+  })
 })
 
 

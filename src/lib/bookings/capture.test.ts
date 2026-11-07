@@ -37,6 +37,7 @@ vi.mock('@/lib/ai/admin-client', () => ({
 }))
 
 import { captureBookingFromChat, extractBookingFromChat } from './capture'
+import { systemPromptText } from '@/lib/ai/types'
 
 const ARGS = { accountId: 'a1', conversationId: 'conv-1', noteUserId: 'agent-1' }
 const TYPE = {
@@ -173,7 +174,7 @@ describe('captureBookingFromChat', () => {
 
   it('uses the capture prompt rather than the reply prompt', async () => {
     await captureBookingFromChat(ARGS)
-    const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    const prompt = systemPromptText(h.generateReply.mock.calls[0][0].systemPrompt)
     expect(prompt).toContain('You do not reply')
   })
 

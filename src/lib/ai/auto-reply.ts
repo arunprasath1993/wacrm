@@ -4,7 +4,7 @@ import { resolveConversationReplyCap } from './reply-cap-server'
 import { buildConversationContext } from './context'
 import { retrieveKnowledge } from './knowledge'
 import { generateReply } from './generate'
-import { buildSystemPrompt } from './defaults'
+import { buildSystemPromptBlocks } from './defaults'
 import { buildBotPauseSummary, buildHandoffSummary } from './handoff'
 import { detectAutomatedSender } from './bot-detect'
 import { logAiUsage } from './usage'
@@ -25,7 +25,13 @@ import {
   loadActiveBookingStep,
   settleBookingStep,
 } from '@/lib/flows/engine'
-import type { AiConfig, AiUsage, ChatMessage } from './types'
+import {
+  appendSystemText,
+  type AiConfig,
+  type AiUsage,
+  type ChatMessage,
+  type SystemPrompt,
+} from './types'
 import type { Automation } from '@/types'
 import { triggerMatches } from '@/lib/automations/trigger-match'
 
@@ -253,7 +259,7 @@ export async function dispatchInboundToAiReply(
         }
       : null
 
-    const systemPrompt = buildSystemPrompt({
+    const systemPrompt = buildSystemPromptBlocks({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
@@ -504,7 +510,7 @@ export async function dispatchInboundToAiReply(
 async function generateFollowUp(args: {
   instruction: string
   config: AiConfig
-  systemPrompt: string
+  systemPrompt: SystemPrompt
   messages: ChatMessage[]
   log: (usage: AiUsage | null) => void
 }): Promise<string | null> {
@@ -512,7 +518,7 @@ async function generateFollowUp(args: {
   try {
     const { text, handoff, usage } = await generateReply({
       config,
-      systemPrompt: `${systemPrompt}\n\n${instruction}`,
+      systemPrompt: appendSystemText(systemPrompt, instruction),
       messages,
     })
     log(usage)

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { AiConfig } from './types'
+import { systemPromptText, type AiConfig } from './types'
 
 // Shared, hoisted mock state so the module mocks can close over it.
 const h = vi.hoisted(() => ({
@@ -359,7 +359,7 @@ describe('dispatchInboundToAiReply — bookings', () => {
     })
     await dispatchInboundToAiReply(ARGS)
 
-    const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    const prompt = systemPromptText(h.generateReply.mock.calls[0][0].systemPrompt)
     expect(prompt).toContain('Current date and time')
     expect(prompt).toContain('"online_demo"')
     expect(prompt).toContain('Ramu')
@@ -377,7 +377,7 @@ describe('dispatchInboundToAiReply — bookings', () => {
     it('steers the model toward that booking type', async () => {
       await dispatchInboundToAiReply(ARGS)
 
-      const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+      const prompt = systemPromptText(h.generateReply.mock.calls[0][0].systemPrompt)
       expect(prompt).toContain('Current task')
       expect(prompt).toContain('Online Demo')
       expect(prompt).toContain('- name: Ramu')
@@ -488,7 +488,7 @@ describe('dispatchInboundToAiReply — bookings', () => {
   it('does not touch flows when no booking step is waiting', async () => {
     await dispatchInboundToAiReply(ARGS)
     expect(h.settleBookingStep).not.toHaveBeenCalled()
-    const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    const prompt = systemPromptText(h.generateReply.mock.calls[0][0].systemPrompt)
     expect(prompt).not.toContain('Current task')
   })
 
@@ -496,7 +496,7 @@ describe('dispatchInboundToAiReply — bookings', () => {
     h.loadAvailability.mockResolvedValue({ online_demo: ['Mon, 2 Nov, 9:00 am'] })
     await dispatchInboundToAiReply(ARGS)
 
-    const prompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    const prompt = systemPromptText(h.generateReply.mock.calls[0][0].systemPrompt)
     expect(prompt).toContain('Mon, 2 Nov, 9:00 am')
   })
 
@@ -631,7 +631,7 @@ describe('dispatchInboundToAiReply — bookings', () => {
 
     it('tells the model what to ask', async () => {
       await dispatchInboundToAiReply(ARGS)
-      const retry = h.generateReply.mock.calls[1][0].systemPrompt as string
+      const retry = systemPromptText(h.generateReply.mock.calls[1][0].systemPrompt)
       expect(retry).toContain(FOLLOW_UP)
     })
 
@@ -709,7 +709,7 @@ describe('dispatchInboundToAiReply — eligibility gates', () => {
     h.retrieveKnowledge.mockResolvedValue(['Returns accepted within 30 days.'])
     await dispatchInboundToAiReply(ARGS)
     expect(h.retrieveKnowledge).toHaveBeenCalled()
-    const systemPrompt = h.generateReply.mock.calls[0][0].systemPrompt as string
+    const systemPrompt = systemPromptText(h.generateReply.mock.calls[0][0].systemPrompt)
     expect(systemPrompt).toContain('Returns accepted within 30 days.')
   })
 
