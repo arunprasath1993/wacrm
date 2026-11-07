@@ -94,6 +94,12 @@ export async function dispatchInboundToAiReply(
   // the flow continue instead of leaving it parked until the timeout.
   let resumeFlowOnError: (() => Promise<void>) | null = null
 
+  // Every silent exit below logs why, so "the bot didn't answer" is
+  // diagnosable from the server log (pm2 / host logs) without guessing.
+  const skip = (reason: string): void => {
+    console.info(`[ai auto-reply] skipped conversation ${conversationId}: ${reason}`)
+  }
+
   try {
     const db = supabaseAdmin()
 
@@ -141,16 +147,16 @@ export async function dispatchInboundToAiReply(
         triggerMatches(a as Automation, { message_text: inboundText })
       )
     })
-    if (respondsToThisMessage) return
+    if (respondsToThisMessage) return skip('a matching automation handles this message')
 
     const { data: conv, error: convErr } = await db
       .from('conversations')
       .select('assigned_agent_id, ai_autoreply_disabled, ai_reply_count')
       .eq('id', conversationId)
       .maybeSingle()
-    if (convErr || !conv) return
-    if (conv.assigned_agent_id) return // a human owns this thread
-    if (conv.ai_autoreply_disabled) return // handed off / turned off here
+    if (convErr || !conv) return skip('conversation not found')
+    if (conv.assigned_agent_id) return skip('a human agent is assigned') // a human owns this thread
+    if (conv.ai_autoreply_disabled) return skip('bot paused on this conversation') // handed off / turned off here
     // Testing numbers get their own cap; everyone else the customer cap.
     const replyCap = await resolveConversationReplyCap(
       db,
@@ -163,10 +169,10 @@ export async function dispatchInboundToAiReply(
     )
     // Cheap early-out; the authoritative cap check is the atomic claim
     // below (this read can race a concurrent inbound).
-    if (conv.ai_reply_count >= replyCap) return
+    if (conv.ai_reply_count >= replyCap) return skip(`reply cap reached (${conv.ai_reply_count}/${replyCap})`)
 
     const messages = await buildConversationContext(db, conversationId)
-    if (messages.length === 0) return
+    if (messages.length === 0) return skip('no conversation context')
 
     // Bot-loop guard: the other side is an automated responder (an IVR
     // menu, another company's chatbot). Answering it would loop forever
@@ -414,7 +420,13 @@ export async function dispatchInboundToAiReply(
         update.assigned_agent_id = config.handoffAgentId
       }
       await db.from('conversations').update(update).eq('id', conversationId)
-      return
+      return skip(
+        handoff
+          ? 'model asked for a human handoff'
+          : bookingFailed
+            ? 'booking could not be saved'
+            : 'model returned no text',
+      )
     }
 
     if (
@@ -422,7 +434,7 @@ export async function dispatchInboundToAiReply(
       (await hasNewerInbound(db, conversationId, inboundMessageId))
     ) {
       await resumeFlow()
-      return
+      return skip('a newer customer message arrived while generating')
     }
 
     // Atomically claim a reply slot: the cap check + increment happen in
@@ -448,7 +460,7 @@ export async function dispatchInboundToAiReply(
     }
     if (claimed !== true) {
       await resumeFlow()
-      return
+      return skip(`reply slot not claimed (cap ${replyCap})`)
     }
 
     await engineSendText({
