@@ -33,6 +33,7 @@ import {
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
+import { extractStandbyInbound } from '@/lib/whatsapp/standby'
 import {
   inboundLogEnabled,
   outcomeRow,
@@ -134,6 +135,9 @@ interface WhatsAppWebhookEntry {
         parent_user_id?: string
       }>
       messages?: WhatsAppMessage[]
+      /** Customer messages while another responder (e.g. Meta Business
+       *  Agent) holds the thread — see lib/whatsapp/standby.ts. */
+      standby?: unknown
       statuses?: Array<{
         id: string
         status: string
@@ -387,8 +391,17 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         }
       }
 
-      // Handle incoming messages
-      if (!value.messages || !value.contacts) continue
+      // Handle incoming messages. Normally on `value.messages`; while
+      // another responder such as Meta Business Agent holds the thread
+      // Meta delivers them on the `standby` field instead, often without
+      // a `contacts` block (identity then comes from `message.from`).
+      const standby =
+        change.field === 'standby' || value.standby !== undefined
+          ? extractStandbyInbound<WhatsAppMessage, WaContactPayload>(value)
+          : null
+      const inboundMessages = value.messages ?? standby?.messages ?? []
+      const inboundContacts = value.contacts ?? standby?.contacts ?? []
+      if (inboundMessages.length === 0) continue
 
       const phoneNumberId = value.metadata.phone_number_id
 
@@ -440,9 +453,9 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
         throw error
       }
 
-      for (let i = 0; i < value.messages.length; i++) {
-        const message = value.messages[i]
-        const contact = value.contacts[i] || value.contacts[0]
+      for (let i = 0; i < inboundMessages.length; i++) {
+        const message = inboundMessages[i]
+        const contact = inboundContacts[i] || inboundContacts[0]
 
         const result = await processMessage(
           message,
