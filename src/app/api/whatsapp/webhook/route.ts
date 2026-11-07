@@ -978,6 +978,11 @@ async function processMessage(
   // Awaited inside `after()` (same reason as the webhook dispatch below);
   // `dispatchInboundToAiReply` owns its eligibility gates + try/catch and
   // never throws.
+  if (contentConsumed) {
+    console.info(
+      `[ai auto-reply] not dispatched for ${message.id}: handled by ${flowConsumed ? 'a flow' : 'an automation waiting for a reply'}`
+    )
+  }
   if (!contentConsumed && inboundText.trim()) {
     await dispatchInboundToAiReply({
       accountId,
