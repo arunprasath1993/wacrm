@@ -4,9 +4,9 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 import { loadAiConfig } from '@/lib/ai/config'
 import { retrieveKnowledge } from '@/lib/ai/knowledge'
 import { generateReply } from '@/lib/ai/generate'
-import { buildSystemPrompt } from '@/lib/ai/defaults'
+import { buildSystemPromptBlocks } from '@/lib/ai/defaults'
 import { latestUserMessage } from '@/lib/ai/query'
-import { AiError, type ChatMessage } from '@/lib/ai/types'
+import { AiError, appendSystemText, type ChatMessage } from '@/lib/ai/types'
 import { resolveTimeZone } from '@/lib/ai/usage-days'
 import { loadBookingContext } from '@/lib/bookings/load'
 import { previewSlotCheck } from '@/lib/bookings/save'
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       ? await loadAvailability(supabase, accountId, bookingTypes, timeZone)
       : {}
 
-    const systemPrompt = buildSystemPrompt({
+    const systemPrompt = buildSystemPromptBlocks({
       userPrompt: config.systemPrompt,
       mode: 'auto_reply',
       knowledge,
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
       try {
         followUp = await generateReply({
           config,
-          systemPrompt: `${systemPrompt}\n\n${slot.instruction}`,
+          systemPrompt: appendSystemText(systemPrompt, slot.instruction),
           messages,
         })
       } catch (err) {

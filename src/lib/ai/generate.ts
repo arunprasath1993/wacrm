@@ -4,6 +4,7 @@ import {
   type AiUsage,
   type ChatMessage,
   type GenerateResult,
+  type SystemPrompt,
 } from './types'
 import { HANDOFF_SENTINEL, aiRequestTimeoutMs } from './defaults'
 import { generateOpenAi } from './providers/openai'
@@ -14,8 +15,8 @@ import { extractBookingMarker } from '@/lib/bookings/marker'
 
 export interface GenerateArgs {
   config: AiConfig
-  /** Fully-built system prompt (see `buildSystemPrompt`). */
-  systemPrompt: string
+  /** Fully-built system prompt (see `buildSystemPromptBlocks`). */
+  systemPrompt: SystemPrompt
   /** Recent conversation turns, oldest first. */
   messages: ChatMessage[]
 }

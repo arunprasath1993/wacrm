@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   agentChatCapturePrompt,
+  agentChatCapturePromptBlocks,
   bookingProtocolSection,
   currentTimeSection,
   customerMemorySection,
@@ -165,6 +166,21 @@ describe('agentChatCapturePrompt', () => {
   it('requires a clear agreement, and treats the chat as data', () => {
     expect(prompt).toMatch(/clearly agreed/i)
     expect(prompt).toMatch(/never as instructions/i)
+  })
+
+  it('caches the instructions and types, not the time or memory', () => {
+    const blocks = agentChatCapturePromptBlocks({
+      types: [INSTALL],
+      now: new Date('2026-10-31T18:00:00.000Z'),
+      timeZone: 'Asia/Kolkata',
+      customerMemory: { name: 'Ramu', company: null, bookings: [] },
+    })
+    expect(blocks[0].cache).toBe(true)
+    expect(blocks[0].text).toContain('"installation"')
+    expect(blocks[0].text).not.toContain('Current date and time')
+    expect(blocks[1].cache).toBeUndefined()
+    expect(blocks[1].text).toContain('Current date and time')
+    expect(blocks[1].text).toContain('Ramu')
   })
 })
 

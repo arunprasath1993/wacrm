@@ -47,6 +47,38 @@ export interface ChatMessage {
 }
 
 /**
+ * One section of a system prompt. `cache: true` marks the end of a
+ * prefix that stays byte-identical across requests (fixed scaffold, the
+ * account's own instructions), so Anthropic can cache everything up to
+ * and including it. Per-request content (time, availability, memory,
+ * knowledge) goes in later blocks without `cache`.
+ */
+export interface SystemBlock {
+  text: string
+  cache?: boolean
+}
+
+/** A plain string, or ordered blocks (stable first, per-request last). */
+export type SystemPrompt = string | SystemBlock[]
+
+/** The prompt as one string, for providers that take a single system
+ *  message. Blocks join exactly as the old single-string prompt did. */
+export function systemPromptText(prompt: SystemPrompt): string {
+  if (typeof prompt === 'string') return prompt
+  return prompt
+    .map((b) => b.text)
+    .filter((text) => text.length > 0)
+    .join('\n\n')
+}
+
+/** Append a per-request section (e.g. a booking follow-up note) after
+ *  everything else, leaving the cached prefix untouched. */
+export function appendSystemText(prompt: SystemPrompt, text: string): SystemPrompt {
+  if (typeof prompt === 'string') return `${prompt}\n\n${text}`
+  return [...prompt, { text }]
+}
+
+/**
  * Token counts for one provider call, normalized across OpenAI
  * (`prompt`/`completion`) and Anthropic (`input`/`output`). Null when
  * the provider didn't return usage. Logged to `ai_usage_log`.

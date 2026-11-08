@@ -1,4 +1,4 @@
-import { AiError, type AiUsage, type ChatMessage } from '../types'
+import { AiError, type AiUsage, type ChatMessage, type SystemPrompt } from '../types'
 import { getT } from '@/lib/i18n/translate'
 
 const t = getT('LibErrors')
@@ -10,7 +10,7 @@ const t = getT('LibErrors')
 export interface ProviderArgs {
   apiKey: string
   model: string
-  systemPrompt: string
+  systemPrompt: SystemPrompt
   messages: ChatMessage[]
   timeoutMs: number
   /** Custom OpenAI-compatible base URL; omitted for native providers. */

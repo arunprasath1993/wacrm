@@ -9,7 +9,7 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { loadBookingContext } from './load'
 import type { CustomerMemory } from './memory'
 import { loadCustomerMemory } from './memory'
-import { agentChatCapturePrompt } from './prompt'
+import { agentChatCapturePromptBlocks } from './prompt'
 import { saveBookingFromAi } from './save'
 import type { BookingMarker, BookingType } from './types'
 
@@ -48,7 +48,7 @@ export async function extractBookingFromChat(args: {
   try {
     const { booking, usage } = await generateReply({
       config,
-      systemPrompt: agentChatCapturePrompt({
+      systemPrompt: agentChatCapturePromptBlocks({
         types,
         now: new Date(),
         timeZone,
