@@ -8,10 +8,14 @@ const h = vi.hoisted(() => ({
   dispatchInboundToAiReply: vi.fn(),
   dispatchWebhookEvent: vi.fn(),
   applyMessageStatus: vi.fn(),
+  recordTouch: vi.fn(),
   state: {
     // Result the message upsert's .select() resolves to. A genuine insert
     // returns the row; a replayed delivery conflicts and returns [].
     messageUpsertResult: [{ id: 'msg-1' }] as { id: string }[],
+    /** Errors successive message upserts resolve with (shifted per call);
+     *  an empty queue or a null entry means that upsert succeeds. */
+    messageUpsertErrors: [] as ({ code: string; message: string } | null)[],
     firstInboundUnclaimed: true,
     firstInboundClaims: 0,
     /** Row `lookupInternalIdByMetaId` resolves for a `context.id`. */
@@ -198,12 +202,14 @@ vi.mock('@supabase/supabase-js', () => ({
             // Idempotent insert: upsert(...).select('id')
             upsert: (row: Record<string, unknown>, options: unknown) => {
               h.state.upsertCalls.push({ row, options })
+              const error = h.state.messageUpsertErrors.shift() ?? null
               return {
                 select: () =>
-                  Promise.resolve({
-                    data: h.state.messageUpsertResult,
-                    error: null,
-                  }),
+                  Promise.resolve(
+                    error
+                      ? { data: null, error }
+                      : { data: h.state.messageUpsertResult, error: null },
+                  ),
               }
             },
           }
@@ -284,6 +290,9 @@ vi.mock('@/lib/webhooks/deliver', () => ({
 }))
 vi.mock('@/lib/whatsapp/message-status-sync', () => ({
   applyMessageStatus: h.applyMessageStatus,
+}))
+vi.mock('@/lib/ads/record-touch', () => ({
+  recordTouch: h.recordTouch,
 }))
 
 import { POST } from './route'
@@ -372,6 +381,7 @@ async function runStatusWebhook(status: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks()
   h.state.messageUpsertResult = [{ id: 'msg-1' }]
+  h.state.messageUpsertErrors = []
   h.state.firstInboundUnclaimed = true
   h.state.firstInboundClaims = 0
   h.state.replyContextParent = null
@@ -411,6 +421,7 @@ beforeEach(() => {
   h.dispatchInboundToAiReply.mockResolvedValue(undefined)
   h.dispatchWebhookEvent.mockResolvedValue(undefined)
   h.applyMessageStatus.mockResolvedValue([])
+  h.recordTouch.mockResolvedValue(undefined)
   h.runAutomationsForTrigger.mockImplementation(() => {
     h.state.automationStarted++
     return new Promise<void>((resolve) => {
@@ -1312,5 +1323,212 @@ describe('inbound webhook: standby field (Meta Business Agent holds the thread)'
   it("ignores the agent's own outgoing echoes", async () => {
     await runStandby([{ ...tap, id: 'wamid.SB2', from: '919000000000', to: '15551230000' }])
     expect(h.state.upsertCalls).toHaveLength(0)
+  })
+})
+
+describe('inbound webhook: ad referral capture and attribution touches', () => {
+  const REFERRAL = {
+    source_url: 'https://fb.me/abc123',
+    source_id: '120200000000001',
+    source_type: 'ad',
+    headline: 'Book a free demo',
+    body: 'Tap to chat with us',
+    media_type: 'image',
+    image_url: 'https://scontent.test/ad.jpg',
+    ctwa_clid: 'ARAkLmNoPq',
+  }
+
+  const AD_TEXT = { ...TEXT_MESSAGE, id: 'wamid.AD1', referral: REFERRAL }
+
+  const AD_IMAGE = {
+    id: 'wamid.ADIMG1',
+    from: '15551230000',
+    timestamp: '1700000000',
+    type: 'image',
+    image: { id: '1234567890123456', mime_type: 'image/jpeg' },
+    referral: REFERRAL,
+  }
+
+  const RETRY_WARNING =
+    '[webhook] message upsert with referral failed, retrying without'
+
+  function expectTouch(messageId: string, referral: unknown) {
+    expect(h.recordTouch).toHaveBeenCalledTimes(1)
+    expect(h.recordTouch).toHaveBeenCalledWith(expect.anything(), {
+      accountId: 'acc-1',
+      contactId: 'contact-1',
+      conversationId: 'conv-1',
+      messageId,
+      touchedAt: new Date(1700000000 * 1000).toISOString(),
+      referral,
+    })
+  }
+
+  it('stores the referral on a text message and records the touch', async () => {
+    await runWebhook(AD_TEXT)
+
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.state.upsertCalls[0].row).toMatchObject({ referral: REFERRAL })
+    expectTouch('wamid.AD1', REFERRAL)
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+  })
+
+  it('stores the referral on an image message and records the touch', async () => {
+    await runWebhook(AD_IMAGE)
+
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.state.upsertCalls[0].row).toMatchObject({
+      content_type: 'image',
+      referral: REFERRAL,
+    })
+    expectTouch('wamid.ADIMG1', REFERRAL)
+  })
+
+  it('retries without referral when the upsert fails on a missing column (PGRST204)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    h.state.messageUpsertErrors = [
+      { code: 'PGRST204', message: "Could not find the 'referral' column" },
+    ]
+
+    await runWebhook(AD_TEXT)
+
+    expect(h.state.upsertCalls).toHaveLength(2)
+    expect(h.state.upsertCalls[0].row).toHaveProperty('referral', REFERRAL)
+    expect(h.state.upsertCalls[1].row).not.toHaveProperty('referral')
+    expect(h.state.upsertCalls[1].row).toMatchObject({
+      message_id: 'wamid.AD1',
+      content_text: 'hello',
+    })
+    expect(h.state.upsertCalls[1].options).toMatchObject({
+      onConflict: 'conversation_id,message_id',
+      ignoreDuplicates: true,
+    })
+    expect(warn).toHaveBeenCalledWith(RETRY_WARNING, 'PGRST204')
+    // Processed normally after the retry.
+    expect(h.state.rpcCalls).toHaveLength(1)
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    expect(h.dispatchWebhookEvent).toHaveBeenCalledTimes(1)
+    expectTouch('wamid.AD1', REFERRAL)
+    warn.mockRestore()
+  })
+
+  it('retries without referral on a non-column error too (22P02)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    h.state.messageUpsertErrors = [
+      { code: '22P02', message: 'invalid input syntax for type json' },
+    ]
+
+    await runWebhook(AD_TEXT)
+
+    expect(h.state.upsertCalls).toHaveLength(2)
+    expect(h.state.upsertCalls[1].row).not.toHaveProperty('referral')
+    expect(warn).toHaveBeenCalledWith(RETRY_WARNING, '22P02')
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
+
+  it('an upsert error without referral behaves as today: insert_failed, no retry', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+    h.state.messageUpsertErrors = [{ code: '23514', message: 'check violation' }]
+
+    await runWebhook()
+
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.state.upsertCalls[0].row).not.toHaveProperty('referral')
+    expect(h.state.inboundLogRows.map((r) => r.outcome)).toEqual([
+      'received',
+      'insert_failed',
+    ])
+    expect(warn).not.toHaveBeenCalledWith(RETRY_WARNING, expect.anything())
+    expect(h.recordTouch).not.toHaveBeenCalled()
+    expect(h.dispatchInboundToFlows).not.toHaveBeenCalled()
+    err.mockRestore()
+    warn.mockRestore()
+  })
+
+  it('a replay with referral still records the touch but fans out nothing', async () => {
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+    h.state.messageUpsertResult = []
+
+    await runWebhook(AD_TEXT)
+
+    expectTouch('wamid.AD1', REFERRAL)
+    expect(h.state.inboundLogRows.map((r) => r.outcome)).toEqual([
+      'received',
+      'duplicate',
+    ])
+    expect(h.state.rpcCalls).toHaveLength(0)
+    expect(h.dispatchInboundToFlows).not.toHaveBeenCalled()
+    expect(h.runAutomationsForTrigger).not.toHaveBeenCalled()
+    expect(h.dispatchInboundToAiReply).not.toHaveBeenCalled()
+    expect(h.dispatchWebhookEvent).not.toHaveBeenCalled()
+  })
+
+  it('a plain message records a touch with referral null and stores no referral key', async () => {
+    await runWebhook()
+
+    expect(h.state.upsertCalls[0].row).not.toHaveProperty('referral')
+    expectTouch('wamid.TEST1', null)
+  })
+
+  it('captures the referral on a standby-delivered message', async () => {
+    const body = {
+      entry: [
+        {
+          changes: [
+            {
+              field: 'standby',
+              value: {
+                messaging_product: 'whatsapp',
+                metadata: { phone_number_id: 'pn-1', display_phone_number: '919000000000' },
+                standby: [{ ...AD_TEXT, id: 'wamid.SBAD1' }],
+              },
+            },
+          ],
+        },
+      ],
+    }
+    await POST(signedPost(JSON.stringify(body)))
+    for (const cb of h.state.afterCallbacks) await cb()
+
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.state.upsertCalls[0].row).toMatchObject({ referral: REFERRAL })
+    expectTouch('wamid.SBAD1', REFERRAL)
+  })
+
+  it('a rejecting recordTouch leaves the message outcome unchanged', async () => {
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+    h.recordTouch.mockRejectedValueOnce(new Error('rpc down'))
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await runWebhook(AD_TEXT)
+
+    expect(h.state.inboundLogRows.map((r) => r.outcome)).toEqual([
+      'received',
+      'inserted',
+    ])
+    expect(h.state.rpcCalls).toHaveLength(1)
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    expect(h.dispatchWebhookEvent).toHaveBeenCalledTimes(1)
+    err.mockRestore()
+  })
+
+  it('a synchronously throwing recordTouch leaves the message outcome unchanged', async () => {
+    process.env.WEBHOOK_DEBUG_LOG = 'true'
+    h.recordTouch.mockImplementationOnce(() => {
+      throw new Error('boom')
+    })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await runWebhook(AD_TEXT)
+
+    expect(h.state.inboundLogRows.map((r) => r.outcome)).toEqual([
+      'received',
+      'inserted',
+    ])
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    err.mockRestore()
   })
 })

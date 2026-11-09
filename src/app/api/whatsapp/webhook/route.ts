@@ -34,6 +34,8 @@ import {
 } from '@/lib/whatsapp/template-webhook'
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
 import { extractStandbyInbound } from '@/lib/whatsapp/standby'
+import { recordTouch } from '@/lib/ads/record-touch'
+import type { WaReferral } from '@/lib/ads/types'
 import {
   inboundLogEnabled,
   outcomeRow,
@@ -107,6 +109,8 @@ interface WhatsAppMessage {
   button?: { text?: string; payload?: string }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
+  /** Click-to-WhatsApp ad / post attribution (first message after a tap). */
+  referral?: WaReferral
 }
 
 /** One entry of a failed status's `errors` array, as Meta sends it. */
@@ -769,36 +773,74 @@ async function processMessage(
   // ONLY on a genuine first insert — an empty result means this delivery
   // was a replay. This is the single idempotency boundary that must sit
   // BEFORE the unread bump and all downstream fan-out below (issue #367).
-  const { data: insertedRows, error: msgError } = await supabaseAdmin()
-    .from('messages')
-    .upsert(
-      {
-        conversation_id: conversation.id,
-        sender_type: 'customer',
-        content_type: contentType,
-        content_text: contentText,
-        media_url: mediaUrl,
-        // Meta's MIME type for the attachment (migration 039). Was
-        // discarded before, which forced the download path to guess an
-        // extension from the fetched blob — impossible to do until the
-        // bytes had already been fetched successfully.
-        media_type: mediaType,
-        message_id: message.id,
-        status: 'delivered',
-        created_at: receivedAt,
-        reply_to_message_id: replyToInternalId,
-        // Only populated for content_type='interactive'. Migration 010 added
-        // the column; null for every other content_type so existing inserts
-        // behave identically.
-        interactive_reply_id: interactiveReplyId,
-      },
-      { onConflict: 'conversation_id,message_id', ignoreDuplicates: true }
+  const messageRow = {
+    conversation_id: conversation.id,
+    sender_type: 'customer',
+    content_type: contentType,
+    content_text: contentText,
+    media_url: mediaUrl,
+    // Meta's MIME type for the attachment (migration 039). Was
+    // discarded before, which forced the download path to guess an
+    // extension from the fetched blob — impossible to do until the
+    // bytes had already been fetched successfully.
+    media_type: mediaType,
+    message_id: message.id,
+    status: 'delivered',
+    created_at: receivedAt,
+    reply_to_message_id: replyToInternalId,
+    // Only populated for content_type='interactive'. Migration 010 added
+    // the column; null for every other content_type so existing inserts
+    // behave identically.
+    interactive_reply_id: interactiveReplyId,
+  }
+  const upsertMessage = (row: Record<string, unknown>) =>
+    supabaseAdmin()
+      .from('messages')
+      .upsert(row, {
+        onConflict: 'conversation_id,message_id',
+        ignoreDuplicates: true,
+      })
+      .select('id')
+
+  // Ad attribution (migration 069). The `referral` key is only sent when
+  // Meta included one, so plain messages hit exactly the same insert as
+  // before. If the insert with it fails for ANY reason (069 not applied
+  // yet, a payload the jsonb cast rejects, …) retry once without it — the
+  // message itself must always be saved.
+  let { data: insertedRows, error: msgError } = await upsertMessage(
+    message.referral
+      ? { ...messageRow, referral: message.referral }
+      : messageRow
+  )
+  if (msgError && message.referral) {
+    console.warn(
+      '[webhook] message upsert with referral failed, retrying without',
+      msgError.code
     )
-    .select('id')
+    ;({ data: insertedRows, error: msgError } = await upsertMessage(messageRow))
+  }
 
   if (msgError) {
     console.error('Error inserting message:', msgError)
     return { outcome: 'insert_failed', detail: msgError.message }
+  }
+
+  // Record the attribution touch (ad / post / direct) for this inbound.
+  // Placed BEFORE the replay return so a replay still gets its touch —
+  // record_contact_touch is idempotent on message_id. recordTouch never
+  // throws by contract; the try/catch is belt-and-braces so attribution
+  // can never change the message's outcome.
+  try {
+    await recordTouch(supabaseAdmin(), {
+      accountId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      messageId: message.id,
+      touchedAt: receivedAt,
+      referral: message.referral ?? null,
+    })
+  } catch (err) {
+    console.error('[webhook] recordTouch threw:', err)
   }
 
   // Replayed delivery: the message already exists, so acknowledge it as a
