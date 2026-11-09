@@ -123,3 +123,28 @@ export async function graphGetAll<T>(
   }
   return out
 }
+
+/**
+ * Tests a Meta access token against an ad account.
+ * Returns ok=true with account info on success, ok=false with error on failure.
+ */
+export async function testMetaConnection(
+  adAccountId: string,
+  token: string,
+): Promise<{ ok: true; name: string; currency: string; timezone: string } | { ok: false; error: string }> {
+  try {
+    const info = await graphGet<{ name?: string; currency?: string; timezone_name?: string }>(
+      `/${adAccountId}`,
+      { fields: 'name,currency,timezone_name' },
+      token,
+    )
+    return {
+      ok: true,
+      name: info.name ?? 'Unknown',
+      currency: info.currency ?? 'USD',
+      timezone: info.timezone_name ?? 'UTC',
+    }
+  } catch (err) {
+    return { ok: false, error: friendlySyncError(err) }
+  }
+}
