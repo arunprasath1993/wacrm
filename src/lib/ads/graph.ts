@@ -92,6 +92,7 @@ async function request<T>(url: string): Promise<T> {
     console.error('[ads/graph] request failed', redactGraphUrl(url), {
       code: err.code,
       type: err.type,
+      error_subcode: err.subcode,
       fbtrace_id: err.fbtraceId,
     })
     throw err

@@ -115,3 +115,23 @@ describe('graphGetAll', () => {
     await expect(graphGetAll('/x', {}, SECRET)).rejects.toThrow('too many pages')
   })
 })
+
+describe('failure logging', () => {
+  it('logs code, type, subcode, fbtrace_id and no secrets or cursors', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonRes({ error: { message: 'm', code: 100, error_subcode: 33, type: 'GraphMethodException', fbtrace_id: 'TRACE' } }, 400),
+      ),
+    )
+    await graphGet('/x', { after: 'CURSORA', before: 'CURSORB' }, SECRET).catch(() => {})
+    const logged = JSON.stringify(spy.mock.calls)
+    expect(logged).toContain('33')
+    expect(logged).toContain('TRACE')
+    expect(logged).toContain('GraphMethodException')
+    expect(logged).not.toContain(SECRET)
+    expect(logged).not.toContain('CURSORA')
+    expect(logged).not.toContain('CURSORB')
+  })
+})
