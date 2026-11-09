@@ -45,11 +45,17 @@ export function inboundLogEnabled(): boolean {
   return process.env.WEBHOOK_DEBUG_LOG === 'true'
 }
 
+interface LooseMessage {
+  id?: unknown
+  type?: unknown
+  referral?: { source_type?: unknown; source_id?: unknown; source_url?: unknown }
+}
+
 interface LooseChange {
   field?: unknown
   value?: {
     metadata?: { phone_number_id?: unknown }
-    messages?: { id?: unknown; type?: unknown }[]
+    messages?: LooseMessage[]
     statuses?: unknown[]
     [key: string]: unknown
   }
@@ -57,8 +63,10 @@ interface LooseChange {
 
 /**
  * One row per change in the payload. `detail` lists the keys the change
- * value carried, which is what shows an inbound arriving in a shape we
- * don't handle (no `messages`, no `contacts`, a different field).
+ * `value` carried, which is what shows an inbound arriving in a shape we
+ * don't handle (no `messages`, no `contacts`, a different field), followed
+ * by one `referral[<message id>]=...` segment per message that carries a
+ * Click-to-WhatsApp `referral`, so real `source_url` values are visible.
  * Tolerates any JSON, because a payload that failed its signature check
  * is logged too.
  */
@@ -79,7 +87,7 @@ export function summarizeWebhook(
       const value = change?.value ?? {}
       const messages = Array.isArray(value.messages)
         ? value.messages
-        : extractStandbyInbound<{ id?: unknown; type?: unknown }, unknown>(value).messages
+        : extractStandbyInbound<LooseMessage, unknown>(value).messages
       rows.push({
         signature_ok: signatureOk,
         field: typeof change?.field === 'string' ? change.field : null,
@@ -88,7 +96,7 @@ export function summarizeWebhook(
         message_type: messages.map((m) => asText(m?.type)).filter(Boolean).join(',') || null,
         status_count: Array.isArray(value.statuses) ? value.statuses.length : 0,
         outcome: signatureOk ? 'received' : 'bad_signature',
-        detail: Object.keys(value).sort().join(','),
+        detail: [Object.keys(value).sort().join(','), ...referralSegments(messages)].join('; '),
       })
     }
   }
@@ -139,6 +147,19 @@ function emptyRow(signatureOk: boolean, detail: string): InboundLogRow {
     outcome: signatureOk ? 'received' : 'bad_signature',
     detail,
   }
+}
+
+function referralSegments(messages: LooseMessage[]): string[] {
+  const segments: string[] = []
+  for (const m of messages) {
+    const r = m?.referral
+    if (!r || typeof r !== 'object') continue
+    segments.push(
+      `referral[${asText(m.id) ?? ''}]=source_type:${asText(r.source_type) ?? ''}` +
+        `|source_id:${asText(r.source_id) ?? ''}|source_url:${asText(r.source_url) ?? ''}`,
+    )
+  }
+  return segments
 }
 
 function asText(value: unknown): string | null {

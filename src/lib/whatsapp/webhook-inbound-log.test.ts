@@ -68,6 +68,85 @@ describe('summarizeWebhook', () => {
     ])
   })
 
+  it('appends referral fields to detail for a message with referral', () => {
+    const rows = summarizeWebhook(
+      {
+        entry: [
+          {
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  metadata: { phone_number_id: 'pn' },
+                  messages: [
+                    {
+                      id: 'wamid.1',
+                      type: 'text',
+                      referral: {
+                        source_type: 'ad',
+                        source_id: '120',
+                        source_url: 'https://fb.me/abc',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      true,
+    )
+
+    expect(rows[0].detail).toBe(
+      'messages,metadata; referral[wamid.1]=source_type:ad|source_id:120|source_url:https://fb.me/abc',
+    )
+  })
+
+  it('leaves detail unchanged when no message has a referral', () => {
+    const rows = summarizeWebhook(
+      {
+        entry: [
+          { changes: [{ field: 'messages', value: { messages: [{ id: 'wamid.1', type: 'text' }] } }] },
+        ],
+      },
+      true,
+    )
+
+    expect(rows[0].detail).toBe('messages')
+  })
+
+  it('reads referral from standby-delivered messages', () => {
+    const rows = summarizeWebhook(
+      {
+        entry: [
+          {
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  standby: [
+                    {
+                      id: 'wamid.S',
+                      type: 'text',
+                      from: '919000000000',
+                      referral: { source_type: 'post', source_id: '9', source_url: 'https://fb.me/p' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      true,
+    )
+
+    expect(rows[0].detail).toBe(
+      'standby; referral[wamid.S]=source_type:post|source_id:9|source_url:https://fb.me/p',
+    )
+  })
+
   it('marks rows from a payload that failed its signature check', () => {
     const rows = summarizeWebhook(
       { entry: [{ changes: [{ field: 'messages', value: { statuses: [{}, {}] } }] }] },
