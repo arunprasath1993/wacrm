@@ -20,7 +20,8 @@ interface RpcTouch {
   referral: WaReferral | null
 }
 
-async function callRpc(db: SupabaseClient, t: RpcTouch): Promise<void> {
+/** Records one touch through the record_contact_touch RPC (shared with sweep.ts). */
+export async function callRpc(db: SupabaseClient, t: RpcTouch): Promise<void> {
   const c = t.referral ? classifyReferral(t.referral) : null
   const { error } = await db.rpc('record_contact_touch', {
     p_account_id: t.accountId,
