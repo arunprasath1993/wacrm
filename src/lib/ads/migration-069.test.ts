@@ -108,6 +108,15 @@ describe("migration 069_ad_analytics", () => {
     }
   });
 
+  it("indexes the ON DELETE SET NULL foreign keys so contact deletes don't seq-scan", () => {
+    expect(code).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_contacts_first_touch_id\s+ON contacts\(first_touch_id\) WHERE first_touch_id IS NOT NULL;/,
+    );
+    expect(code).toMatch(
+      /CREATE INDEX IF NOT EXISTS idx_contact_touches_conversation\s+ON contact_touches\(conversation_id\) WHERE conversation_id IS NOT NULL;/,
+    );
+  });
+
   it("ends by reloading the PostgREST schema cache", () => {
     expect(code.trim()).toMatch(/NOTIFY pgrst, 'reload schema';$/);
   });

@@ -60,6 +60,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_contact_touches_account_message
   ON contact_touches(account_id, message_id) WHERE message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_contact_touches_contact_time
   ON contact_touches(contact_id, touched_at);
+-- conversation_id is ON DELETE SET NULL: without this every conversation
+-- deleted (e.g. by a contact delete cascade) scans contact_touches.
+CREATE INDEX IF NOT EXISTS idx_contact_touches_conversation
+  ON contact_touches(conversation_id) WHERE conversation_id IS NOT NULL;
 
 -- ---- contacts.first_touch_* -------------------------------------
 ALTER TABLE contacts
@@ -71,6 +75,10 @@ ALTER TABLE contacts
 
 CREATE INDEX IF NOT EXISTS idx_contacts_first_touch
   ON contacts(account_id, first_touch_source_type, first_touch_at);
+-- first_touch_id is ON DELETE SET NULL: each touch deleted by a contact
+-- delete cascade looks up contacts by it, so it needs its own index.
+CREATE INDEX IF NOT EXISTS idx_contacts_first_touch_id
+  ON contacts(first_touch_id) WHERE first_touch_id IS NOT NULL;
 
 -- ---- meta_ads_config --------------------------------------------
 CREATE TABLE IF NOT EXISTS meta_ads_config (
